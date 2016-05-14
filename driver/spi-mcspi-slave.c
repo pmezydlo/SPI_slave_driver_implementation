@@ -30,7 +30,7 @@ MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
 static int mcspi_slave_probe(struct platform_device *pdev){
 
-    printk(KERN_INFO "mcspi_slave probe\n");
+    dev_dbg(&pdev->dev, "probe\n");
 
     const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match, &pdev->dev);
     const struct mcspi_slave_platform_config *pdata; 
@@ -50,18 +50,16 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
     res1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-    //dev_dbg(&pdev->dev, "Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res1->start, (unsigned long)res1->end, resource_size(res1),(unsigned int)regs_);
+    dev_dbg(&pdev->dev, "Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res1->start, 
+                                                                    (unsigned long)res1->end, 
+                                                                    resource_size(res1),
+                                                                    (unsigned int)regs_ffset);
     
-    printk(KERN_INFO "Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res1->start, 
-                                                                 (unsigned long)res1->end, 
-                                                                 resource_size(res1),
-                                                                 (unsigned int)regs_offset);
-
     return 0;
 }
 
 static int mcspi_slave_remove(struct platform_device *pdev){
-//	dev_dbg(&pdev->dev, "driver remove\n");
+	dev_dbg(&pdev->dev, "remove\n");
 	return 0;
 }
 

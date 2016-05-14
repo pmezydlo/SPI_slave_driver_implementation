@@ -7,7 +7,7 @@
     compatible = "ti,beaglebone", "ti,beaglebone-black";
 
     part-number = "spi1mux";
-
+/*
  fragment@0 {
         target = <&am33xx_pinmux>;
         __overlay__ {
@@ -21,6 +21,16 @@
             };
         };
     };
+*/
+
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+             #address-cells = <1>;
+             #size-cells = <0>;
+             status = "disabled";
+        };
+    };
 
 
     fragment@1 {
@@ -29,9 +39,8 @@
              #address-cells = <1>;
              #size-cells = <0>;
              status = "okay";
-             pinctrl-names = "default";
-             pinctrl-0 = <&spi1_pins_s0>;
-
         };
     };
+
+
 };
