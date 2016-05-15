@@ -4,7 +4,10 @@ os:
 
 before_install:
   # Install linux headers
-  -sudo apt-get install -qq linux-headers-$(uname -r)
+  -sudo apt-get update
+  -sudo apt-get upgrade
+  -sudo apt-get install linux-generic
+  -sudo apt-get install linux-headers-$(shell uname -r)
 
 install:
   # Install the arm32 cross-compiler
