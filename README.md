@@ -1,3 +1,5 @@
+<img src="https://travis-ci.org/pmezydlo/SPI_slave_driver_implementation.svg?branch=master" alt=Travis Cl build" />
+
 <h1>SPI slave driver implementation</h1>
 This repository contains the code for SPI slave driver realization of my project for GSOC-2016.
 

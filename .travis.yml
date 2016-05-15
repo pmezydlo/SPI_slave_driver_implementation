@@ -1,0 +1,19 @@
+language: c
+
+os:
+  - linux
+
+notifications:
+  - email: true
+
+install:
+  # Install the arm32 cross-compiler
+  -sudo apt-get install -y gcc-arm-linux-gnueabihf
+  # Install linux headers
+  -sudo apt-get install linux-headers-4.4.8-ti-r22
+
+script:
+  # arm32 compilation
+  - export ARCH=arm
+  - export CROSS_COMPILE=arm-linux-gnueabihf-
+  - make
