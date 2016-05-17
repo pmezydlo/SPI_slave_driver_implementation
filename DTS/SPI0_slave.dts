@@ -1,21 +1,12 @@
 /dts-v1/;
 /plugin/;
 
-/* SPI1 */
+/* SPI0 */
 / {
 
     compatible = "ti,beaglebone", "ti,beaglebone-black";
 
     part-number = "spi1mux";
-
-    fragment@0 {
-        target = <&spi1>;
-        __overlay__ {
-             #address-cells = <1>;
-             #size-cells = <0>;
-             status = "disabled";
-        };
-    };
 
 
     fragment@1 {

@@ -7,21 +7,6 @@
     compatible = "ti,beaglebone", "ti,beaglebone-black";
 
     part-number = "spi1mux";
-/*
- fragment@0 {
-        target = <&am33xx_pinmux>;
-        __overlay__ {
-            spi1_pins_s0: spi1_pins_s0 {
-                        pinctrl-single,pins = <
-                                0x190 0x33
-                                0x194 0x33
-                                0x198 0x13
-                                0x19c 0x13
-                >;
-            };
-        };
-    };
-*/
 
     fragment@0 {
         target = <&spi0>;

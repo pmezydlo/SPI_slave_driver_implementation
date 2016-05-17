@@ -3,11 +3,9 @@
 #include <linux/kernel.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
-
+#include <linux/device.h>
 #define DRIVER_NAME "spi-mcspi-slave"
 #define DEBUG
-
-#include <linux/device.h>
 
 #include "spi-mcspi-slave.h"
  
@@ -27,39 +25,43 @@ static const struct of_device_id mcspi_slave_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
-
 static int mcspi_slave_probe(struct platform_device *pdev){
 
-    dev_dbg(&pdev->dev, "probe\n");
+    struct device *dev = &pdev->dev;
 
-    const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match, &pdev->dev);
+    dev_dbg(dev, "mcspi_slave probe\n");
+
+    const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match, dev);
     const struct mcspi_slave_platform_config *pdata; 
     unsigned int regs_offset = 0;
 
     if (of_id) {
-        pdata = of_id->data;
+       pdata = of_id->data;
     }
     else
     {
-        pdata = dev_get_platdata(&pdev->dev);
+       pdata = dev_get_platdata(dev);
     }
 
     regs_offset = pdata->regs_offset;
         
-    struct resource *res1;
+    struct resource *res;
 
-    res1 = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-    dev_dbg(&pdev->dev, "Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res1->start, 
-                                                                    (unsigned long)res1->end, 
-                                                                    resource_size(res1),
-                                                                    (unsigned int)regs_ffset);
+    res->start-=regs_offset;
+    res->end-=regs_offset;
+
+    dev_dbg(dev,  "dev_dbg: Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res->start, 
+                                                                    (unsigned long)res->end, 
+                                                                    resource_size(res),
+                                                                    (unsigned int)regs_offset);  
     
     return 0;
 }
 
 static int mcspi_slave_remove(struct platform_device *pdev){
-	dev_dbg(&pdev->dev, "remove\n");
+	dev_dbg(&pdev->dev, "mcspi_slave remove\n");
 	return 0;
 }
 

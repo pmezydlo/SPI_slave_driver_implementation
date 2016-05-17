@@ -1,19 +1,27 @@
 language: c
+
 os:
   - linux
 
 before_install:
-  # Install linux headers
-  -sudo apt-get update
-  -sudo apt-get upgrade
-  -sudo apt-get install linux-generic
-  -sudo apt-get install linux-headers-$(shell uname -r)
+  - sudo apt-get update -qq
+  - sudo apt-get install -y gcc-arm-linux-gnueabihf
+  - arm-linux-gnueabihf-gcc --version
+  - sudo apt-get install bc
+  - if [ `uname -m` = x86_64 ]; then sudo apt-get install libc6-i386 lib32stdc++6 lib32z1; fi
 
-install:
-  # Install the arm32 cross-compiler
-  -sudo apt-get install -y gcc-arm-linux-gnueabihf
+before_script:
+  - export MYHOME=$PWD
+  - wget https://github.com/beagleboard/linux/archive/4.4.8-ti-rt-r22.tar.gz
+  - tar zvxf 4.4.8-ti-rt-r22.tar.gz
+  - export DST_KERNEL=$PWD/linux-4.4.8-ti-rt-r22
 
 script:
-  -make
-
-
+  - cd $DST_KERNEL
+  - export ARCH=arm
+  - export CROSS_COMPILE=arm-linux-gnueabihf-
+  - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper
+  - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- defconfig
+  - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all  
+  - cd $MYHOME/SPI_slave_implementation
+  - sudo make

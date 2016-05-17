@@ -1,8 +1,13 @@
+ARCH=arm
+COMPILER=arm-linux-gnueabihf-
+KDIR:=~/linux-4.4.8-ti-rt-r22
+
 obj-m+=driver/spi-mcspi-slave.o
 
-all:
-	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) modules
+PWD := $(shell pwd)
+
+default:
+	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER) modules
 
 clean:
-	make -C /lib/modules/$(shell uname -r)/build/ M=$(PWD) clean
-	rm -r *.order
+	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean
