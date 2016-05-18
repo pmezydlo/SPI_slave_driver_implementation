@@ -24,7 +24,7 @@ script:
   - export CFLAGS="-g3 -std=c99 -pedantic -Wall"
   - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper
   - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- defconfig
-  - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all
+#  - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all
 
   - cd $MYHOME/
   - sudo make
