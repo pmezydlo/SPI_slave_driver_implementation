@@ -5,18 +5,13 @@ os:
 
 before_install:
   - sudo apt-get update -qq
-#  - sudo apt-get install -y gcc-arm-linux-gnueabihf
-#  - arm-linux-gnueabihf-gcc --version
+  - sudo apt-get install -y gcc-arm-linux-gnueabihf
+  - arm-linux-gnueabihf-gcc --version
   - sudo apt-get install bc
   - if [ `uname -m` = x86_64 ]; then sudo apt-get install libc6-i386 lib32stdc++6 lib32z1; fi
 
 before_script:
   - export MYHOME=$PWD
-
-  - wget https://releases.linaro.org/14.04/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz
-  - tar xf gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux.tar.xz
-  - export PATH=$PATH:$PWD/gcc-linaro-arm-linux-gnueabihf-4.8-2014.04_linux/bin 
-
   - wget https://github.com/beagleboard/linux/archive/4.4.8-ti-rt-r22.tar.gz
   - tar zvxf 4.4.8-ti-rt-r22.tar.gz
   - export DST_KERNEL=$PWD/linux-4.4.8-ti-rt-r22
@@ -28,7 +23,8 @@ script:
   - export CROSS_COMPILE=arm-linux-gnueabihf-
   - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper
   - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- defconfig
-  - sudo make -j3 ARCH=arm all  
+  - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all
+
   - cd $MYHOME/
   - sudo make
 
