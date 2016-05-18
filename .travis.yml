@@ -23,6 +23,5 @@ script:
   - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper
   - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- defconfig
   - sudo make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all  
-  - ls -la
   - cd $MYHOME/
   - sudo make
