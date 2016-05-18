@@ -1,6 +1,6 @@
 ARCH=arm
 COMPILER=arm-linux-gnueabihf-
-KDIR:=$(DST_KERNEL)/linux-4.4.8-ti-rt-r22
+KDIR:=$(DST_KERNEL)/
 
 obj-m+=driver/spi-mcspi-slave.o
 
