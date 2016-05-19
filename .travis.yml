@@ -22,7 +22,7 @@ script:
   - export ARCH=arm
   - export CROSS_COMPILE=arm-linux-gnueabihf-
   - sudo make -j3 mrproper
-  - sudo make -j3_defconfig
+  - sudo make -j3 defconfig
   - sudo make -j3 modules
 
   - cd $MYHOME/
