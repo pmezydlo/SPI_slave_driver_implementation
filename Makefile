@@ -1,13 +1,22 @@
 ARCH=arm
 COMPILER=arm-linux-gnueabihf-
-KDIR:=$(DST_KERNEL)/
+
+KDIR := $(DST_KERNEL)/
+UNAME_M := $(shell uname -m)
+PWD := $(shell pwd)
+DST_KERNEL := $(PWD)/linux-4.4.8-ti-rt-r22
+
+ifeq ($(UNAME_M),armv7l)
+        KDIR:="/lib/modules/$(shell uname -r)/build/"
+else
+        KDIR:=$(DST_KERNEL)/
+        export CROSS_COMPILE=$(COMPILER)
+endif
 
 obj-m+=driver/spi-mcspi-slave.o
 
-PWD := $(shell pwd)
-
 default:
-	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean
