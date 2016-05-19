@@ -21,10 +21,9 @@ script:
   
   - export ARCH=arm
   - export CROSS_COMPILE=arm-linux-gnueabihf-
-  - export CFLAGS="-g3 -std=c99 -pedantic -Wall"
-  - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper
-  - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- omap2plus_defconfig
-  - sudo make -j3 CFLAGS="-g3 -std=c99 -pedantic -Wall" ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- all
+  - sudo make -j3 mrproper
+  - sudo make -j3_defconfig
+  - sudo make -j3 modules
 
   - cd $MYHOME/
   - sudo make
