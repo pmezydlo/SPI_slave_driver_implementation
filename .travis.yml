@@ -8,7 +8,6 @@ before_install:
   - sudo apt-get install -y gcc-arm-linux-gnueabihf
   - arm-linux-gnueabihf-gcc --version
   - sudo apt-get install bc
-  - if [ `uname -m` = x86_64 ]; then sudo apt-get install libc6-i386 lib32stdc++6 lib32z1; fi
 
 before_script:
   - export MYHOME=$PWD
