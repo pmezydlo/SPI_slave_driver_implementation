@@ -29,7 +29,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
     struct device *dev = &pdev->dev;
 
-    dev_dbg(dev, "mcspi_slave probe\n");
+    printk(KERN_INFO "mcspi_slave probe\n");
 
     const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match, dev);
     const struct mcspi_slave_platform_config *pdata; 
@@ -38,7 +38,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
     if (of_id) {
        pdata = of_id->data;
     }
-    else
+   else
     {
        pdata = dev_get_platdata(dev);
     }
@@ -52,7 +52,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
     res->start-=regs_offset;
     res->end-=regs_offset;
 
-    dev_dbg(dev,  "dev_dbg: Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res->start, 
+    printk(KERN_INFO "dev_dbg: Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res->start, 
                                                                     (unsigned long)res->end, 
                                                                     resource_size(res),
                                                                     (unsigned int)regs_offset);  
@@ -61,7 +61,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 }
 
 static int mcspi_slave_remove(struct platform_device *pdev){
-	dev_dbg(&pdev->dev, "mcspi_slave remove\n");
+	printk(KERN_INFO "mcspi_slave remove\n");
 	return 0;
 }
 
