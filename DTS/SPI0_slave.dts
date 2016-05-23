@@ -1,7 +1,7 @@
 /dts-v1/;
 /plugin/;
 
-/* SPI0 */
+/* SPI0 slave DTS */
 / {
 
     compatible = "ti,beaglebone", "ti,beaglebone-black";
@@ -14,9 +14,9 @@
             spi0_pins_s0: spi0_pins_s0 {
                 pinctrl-single,pins = <
                   0x150 0x30  /* spi0_sclk, INPUT_PULLUP | MODE0 */
-                  0x154 0x30  /* spi0_d0, INPUT_PULLUP | MODE0 */
-                  0x158 0x10  /* spi0_d1, OUTPUT_PULLUP | MODE0 */
-                  0x15c 0x10  /* spi0_cs0, OUTPUT_PULLUP | MODE0 */
+                  0x154 0x30  /*   spi0_d0, INPUT_PULLUP | MODE0 */
+                  0x158 0x10  /*  spi0_d1, OUTPUT_PULLUP | MODE0 */
+                  0x15c 0x30  /* spi0_cs0, OUTPUT_PULLUP | MODE0 */
                 >;
             };
         };
