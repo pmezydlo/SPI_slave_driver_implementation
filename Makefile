@@ -1,6 +1,6 @@
 ARCH=arm
 COMPILER=arm-linux-gnueabihf-
-
+CC=gcc
 KDIR := $(DST_KERNEL)/
 UNAME_M := $(shell uname -m)
 PWD := $(shell pwd)
@@ -17,6 +17,8 @@ obj-m+=driver/spi-mcspi-slave.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) modules
+	$(CC) -o test_master_app/spidev_test test_master_app/spidev_test.c
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean
+	rm -f *.o
