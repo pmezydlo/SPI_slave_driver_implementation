@@ -21,4 +21,3 @@ default:
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean
-	rm -f *.o
