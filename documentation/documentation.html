@@ -3,17 +3,22 @@
     <meta charset="UTF-8">
 </head>
 <body>
-
+<a href="https://summerofcode.withgoogle.com"><img src="gsoc-basic-logo.png" alt="GSOC" width="231" height="125"/></a>
+<a href="https://beagleboard.org"><img src="beagleboard_logo.png" alt="BeagleBoard.org" width="98" height="125"/></a>
+<a href="http://www.elinux.org"><img src="logo-linux.png" alt="eLinux.org" width="107" height="125"/></a>
+	
 <h1 id="top">SPI slave driver implementation</h1>
 <ol>
 	<li><a href="#introduction">Introduction</a></li>
 	<li><a href="#development-timeline">Development timeline</a></li>
 	<li><a href="#links">Links</a></li>
-        <li><a href="#block-diagram">Block diagram</a></li>	
+    <li><a href="#block-diagram">Block diagram</a></li>	
 	<li><a href="#problems">Problems</a></li>
 	<li><a href="#building-on-beaglebone-board">Building driver on BeagleBone Board</a></li>	
 	<li><a href="#building-on-x86-platform">Building driver on x86 platform</a></li>
 	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
+	<li><a href="#device-tree-overlays">Device Tree Overlays</a></li>
+	<li><a href="#testing-and-wiring">Testing and wiring</a></li>
 </ol>
 
 <h2 id="introduction">Introduction</h2>
@@ -175,9 +180,46 @@
 <ul>	<li>LINUX DEVICE DRIVERS, Third Edition, Jonathan Corbet, Alessandro Rubini, and Greg Kroah-Hartman pdf is here[1]</li>
 <li>Linux Kernel Development, Third Edition, Robert Love pdf is here[2]</li>
 </ul>
-<a href="http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf">[1]http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf</a>
 
-<a href="https://lwn.net/Kernel/LDD3/">[2]https://lwn.net/Kernel/LDD3/</a>
-	
+<a href="https://lwn.net/Kernel/LDD3/">[1]https://lwn.net/Kernel/LDD3/</a>
+
+<a href="http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf">[2]http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf</a>
+
+<h2 id="device-tree-overlays">Device Tree Overlays</h2>	
+<p>DTS is required to operate SPI. In repository there is three device tree source which is located in /DTS/ directory.</p>
+<h3>Building:</h3>
+<ol>
+	<li>Go to the directory:</li>
+	<pre>cd DTS/</pre>
+	<li>Building DTS</li>
+	<pre>dtc -O dtb -o SPI0_master-00A0.dtbo -b 0 -@ SPI0_master.dts</pre>	
+	<li>Copying dtbo files to /lib/firmware/</li>
+	<pre>cp SPI0_master-00A0.dtbo /lib/firmware/</pre>
+</ol>
+
+<h3>Installing:</h3>
+<ol>
+	<li>Installing DTS:</li>
+	<pre>echo SPI0_master>/sys/devices/platform/bone_capemgr/slots</pre>
+	<li>Checking:</li>
+	<pre>cat /sys/devices/platform/bone_capemgr/slots</pre>	
+	<li>Result:</li>
+	<pre> 0: PF----  -1
+ 1: PF----  -1
+ 2: PF----  -1
+ 3: PF----  -1
+ 5: P-O-L-   0 Override Board Name,00A0,Override Manuf,SPI0_master
+</pre>
+</ol>
+
+<h2 id="testing-and-wiring">Testing and wiring</h2>	
+<h3>The first option:</h3>
+<p>One AM335x processor contains two McSPI controllers, 
+what allows to use one controller as  slave and the 
+other as  master. This allows to carry out tests on one board.</p>
+<img src="one_bb.png" alt="one beaglebone" width="242" height="338"/>	
+<h3>The second option:</h3>
+<p>The second option is to use two boards where one works as master and the other as slave.</p>
+<img src="two_bb.png" alt="two beaglebones" width="436" height="338"/>
 </body>
 </html>
