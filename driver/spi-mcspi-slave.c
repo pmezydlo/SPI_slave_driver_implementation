@@ -8,8 +8,8 @@
 #define DEBUG
 
 #include "spi-mcspi-slave.h"
- 
-/* 
+
+/*
  * define omap4 register offset in platform data
  */
 static struct mcspi_slave_platform_config mcspi_slave_pdata = {
@@ -31,20 +31,16 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
     printk(KERN_INFO "mcspi_slave probe\n");
 
-    const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match, dev);
-    const struct mcspi_slave_platform_config *pdata; 
+    const struct of_device_id *of_id = of_match_device(mcspi_slave_of_match,dev);
+    const struct mcspi_slave_platform_config *pdata;
     unsigned int regs_offset = 0;
 
-    if (of_id) {
+    if (of_id)
        pdata = of_id->data;
-    }
-   else
-    {
+    else
        pdata = dev_get_platdata(dev);
-    }
 
     regs_offset = pdata->regs_offset;
-        
     struct resource *res;
 
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -52,11 +48,9 @@ static int mcspi_slave_probe(struct platform_device *pdev){
     res->start-=regs_offset;
     res->end-=regs_offset;
 
-    printk(KERN_INFO "dev_dbg: Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res->start, 
-                                                                    (unsigned long)res->end, 
-                                                                    resource_size(res),
-                                                                    (unsigned int)regs_offset);  
-    
+    printk(KERN_INFO "dev_dbg: Start:%x,  End:%x Size:%d  Offset:%x \n ", (unsigned long)res->start,
+	  (unsigned long)res->end,resource_size(res),(unsigned int)regs_offset);
+
     return 0;
 }
 
@@ -80,12 +74,12 @@ static int __init mcspi_slave_init(void){
         int ret;
         printk(KERN_INFO "mcspi_slave init \n");
         ret = platform_driver_register(&mcspi_slave_driver);
-        
+
         if (ret != 0) {
 
 	}
 	else{
-        
+
 	}
 
 	return 0;
