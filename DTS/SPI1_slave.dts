@@ -13,10 +13,10 @@
         __overlay__ {
             spi1_pins_s0: spi1_pins_s0 {
                 pinctrl-single,pins = <
-                  0x190 0x33  /* spi1_sclk, INPUT_PULLUP | MODE7 */
-                  0x194 0x33  /* spi1_d0,   INPUT_PULLUP | MODE7 */
-                  0x198 0x13  /* spi1_d1,  OUTPUT_PULLUP | MODE7 */
-                  0x19c 0x33  /* spi1_cs0,  INPUT_PULLUP | MODE7 */
+                  0x190 0x33  /* spi1_sclk, INPUT_PULLUP  | MODE7 */
+                  0x194 0x33  /* spi1_d0,   INPUT_PULLUP  | MODE7 */
+                  0x198 0x13  /* spi1_d1,   OUTPUT_PULLUP | MODE7 */
+                  0x19c 0x33  /* spi1_cs0,  INPUT_PULLUP  | MODE7 */
                 >;
             };
         };
@@ -25,11 +25,10 @@
     fragment@1 {
         target = <&spi1>;
         __overlay__ {
-             #address-cells = <1>;
-             #size-cells = <0>;
              status = "okay";
              pinctrl-names = "default";
-             pinctrl-0 = <&spi1_pins_s0>;             
+             pinctrl-0 = <&spi1_pins_s0>;   
+             memory_depth = <36>;
         };
     };
 };
