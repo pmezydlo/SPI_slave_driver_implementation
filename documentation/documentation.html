@@ -3,9 +3,9 @@
     <meta charset="UTF-8">
 </head>
 <body>
-<a href="https://summerofcode.withgoogle.com"><img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/gsoc-basic-logo.png" alt="GSOC" width="231" height="125"/></a>
-<a href="https://beagleboard.org"><img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/beagleboard_logo.png" alt="BeagleBoard.org" width="98" height="125"/></a>
-<a href="http://www.elinux.org"><img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/logo-linux.png" alt="eLinux.org" width="107" height="125"/></a>
+<a href="https://summerofcode.withgoogle.com"><img src="gsoc-basic-logo.png" alt="GSOC" width="231" height="125"/></a>
+<a href="https://beagleboard.org"><img src="beagleboard_logo.png" alt="BeagleBoard.org" width="98" height="125"/></a>
+<a href="http://www.elinux.org"><img src="logo-linux.png" alt="eLinux.org" width="107" height="125"/></a>
 	
 <h1 id="top">SPI slave driver implementation</h1>
 <ol>
@@ -15,9 +15,10 @@
 	<li><a href="#slave-driver-in-linux-architecture">Slave driver in Linux architecture</a></li>	
 	<li><a href="#problems">Problems</a></li>
 	<li><a href="#development-timeline">Development timeline</a></li>
+	<li><a href="#am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</a></li>
+	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
 	<li><a href="#building-on-beaglebone-board">Building driver on BeagleBone Board</a></li>	
 	<li><a href="#building-on-x86-platform">Building driver on x86 platform</a></li>
-	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
 	<li><a href="#device-tree-overlays">Device Tree Overlays</a></li>
 	<li><a href="#testing-and-wiring">Testing and wiring</a></li>
 </ol>
@@ -49,7 +50,7 @@
 </ul>
 
 <h2 id="block-diagram">Block Diagram</h2>
-<img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/block_diagram.png" alt="Block Diagram" width="1114" height="793"/>
+<img src="block_diagram.png" alt="Block Diagram" width="1114" height="793"/>
 	
 <h2 id="slave-driver-in-linux-architecture">Slave driver in Linux architecture</h2>
 <p>The framework in Linux should have 3 layers. In this way, there can be low level 
@@ -188,6 +189,21 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 
 </ol>
 		
+<h2 id="am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</h2>	
+<p>AM335x ARM® Cortex™-A8 Microprocessors (MPUs) Technical Reference Manual:</p>
+<a href="http://phytec.com/wiki/images/7/72/AM335x_techincal_reference_manual.pdf">AM335x_Techincal_Reference_Manual</a>
+<p>Multichannel Serial Port Interface Technical Reference Manual:</p>
+<a href="McSPI_Technical_Reference_Manual.pdf">McSPI_Technical_Reference_Manual</a>
+
+<h2 id="books-about-linux-and-lkm">Books about Linux and LKM</h2>	
+<ul>	<li>LINUX DEVICE DRIVERS, Third Edition, Jonathan Corbet, Alessandro Rubini, and Greg Kroah-Hartman pdf is here[1]</li>
+<li>Linux Kernel Development, Third Edition, Robert Love pdf is here[2]</li>
+</ul>
+
+<a href="https://lwn.net/Kernel/LDD3/">[1]https://lwn.net/Kernel/LDD3/</a>
+
+<a href="http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf">[2]http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf</a>
+
 		
 <h2 id="building-on-beaglebone-board">Building on BeagleBone Board</h2>	
 <ol>
@@ -225,14 +241,6 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 	<pre>make</pre>				
 </ol>
 
-<h2 id="books-about-linux-and-lkm">Books about Linux and LKM</h2>	
-<ul>	<li>LINUX DEVICE DRIVERS, Third Edition, Jonathan Corbet, Alessandro Rubini, and Greg Kroah-Hartman pdf is here[1]</li>
-<li>Linux Kernel Development, Third Edition, Robert Love pdf is here[2]</li>
-</ul>
-
-<a href="https://lwn.net/Kernel/LDD3/">[1]https://lwn.net/Kernel/LDD3/</a>
-
-<a href="http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf">[2]http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf</a>
 
 <h2 id="device-tree-overlays">Device Tree Overlays</h2>	
 <p>DTS is required to operate SPI. In repository there is three device tree source which is located in /DTS/ directory.</p>
@@ -266,9 +274,9 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <p>One AM335x processor contains two McSPI controllers, 
 what allows to use one controller as  slave and the 
 other as  master. This allows to carry out tests on one board.</p>
-<img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/one_bb.png" alt="one beaglebone" width="242" height="338"/>	
+<img src="one_bb.png" alt="one beaglebone" width="242" height="338"/>	
 <h3>The second option:</h3>
 <p>The second option is to use two boards where one works as master and the other as slave.</p>
-<img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/two_bb.png" alt="two beaglebones" width="436" height="338"/>
+<img src="two_bb.png" alt="two beaglebones" width="436" height="338"/>
 </body>
 </html>
