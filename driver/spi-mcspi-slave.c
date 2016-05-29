@@ -4,6 +4,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/device.h>
+#include <linux/io.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -12,6 +13,18 @@
 /*
  * default platform value located in .h file
  */
+
+static inline unsigned int mcspi_slave_read_reg(void __iomem *base, int idx)
+{
+	return readl_relaxed(&base + idx);
+}
+
+static inline void mcspi_slave_write_reg(void __iomem *base,
+		int idx, unsigned int val)
+{
+	writel_relaxed(val, &base + idx);
+}
+
 static struct mcspi_slave_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_SLAVE_REG_OFFSET,
 	.memory_depth	= SPI_MCSPI_SLAVE_MEMORY_DEPTH,
@@ -34,6 +47,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	struct device_node				*node;
 
 	struct resource					*res;
+	struct resource					cp_res;
 	const struct of_device_id			*match;
 	const struct mcspi_slave_platform_config	*pdata;
 
@@ -86,16 +100,35 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
 	regs_offset = pdata->regs_offset;
 
-//	printk(KERN_INFO "id=%d \n", id);
-	printk(KERN_INFO "memory_depth=%d \n", memory_depth);
-	printk(KERN_INFO "num_cs=%d \n", num_cs);
-	printk(KERN_INFO "regs_offset=%d \n", regs_offset);
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	//copy resources because base address is changed
+	memcpy(&cp_res,res,sizeof(struct resource));
 
 	if (res == NULL){
 		printk(KERN_INFO "res not availablee \n");
 	}
+
+
+	//driver is increment allways when omap2 driver is install
+	//base addres is not correct when install a driver more times
+	//but when resources is copied it's ok
+	cp_res.start += regs_offset;
+	cp_res.end   += regs_offset;
+
+	//printk(KERN_INFO "id=%d \n", id);
+	printk(KERN_INFO "start:%x \n",		cp_res.start);
+	printk(KERN_INFO "end:%x \n",		cp_res.end);
+	printk(KERN_INFO "regs_offset=%d \n",	regs_offset);
+	printk(KERN_INFO "memory_depth=%d \n",	memory_depth);
+	printk(KERN_INFO "num_cs=%d \n",	num_cs);
+
+	void __iomem *base = devm_ioremap_resource(&pdev->dev, &cp_res);
+
+	if (IS_ERR(&base)){
+		printk(KERN_INFO "base addres ioremap error!!");
+	}
+
+	//printk(KERN_INFO "MCSPI_REVISION:%x \n",mcspi_slave_read_reg(
 
 	return ret;
 }
