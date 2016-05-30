@@ -1,6 +1,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/device.h>
@@ -11,8 +12,18 @@
 #include "spi-mcspi-slave.h"
 
 /*
- * default platform value located in .h file
+ * this structure describe a device
+ *
  */
+struct spi_slave {
+	struct	device		*dev;
+	void	__iomem		*base;
+	int			fifo_depth;
+	int			num_cs;
+	u32			start;
+	u32			end;
+	u32			reg_offset;
+};
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, int idx)
 {
@@ -25,6 +36,9 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 	writel_relaxed(val, &base + idx);
 }
 
+/*
+ * default platform value located in .h file
+ */
 static struct mcspi_slave_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_SLAVE_REG_OFFSET,
 	.memory_depth	= SPI_MCSPI_SLAVE_MEMORY_DEPTH,
@@ -54,10 +68,18 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	struct omap2_mcspi				*mcspi;
 
 	int						ret = 0;
-	unsigned int					regs_offset;
+	u32						regs_offset;
+
+	struct spi_slave				*slave;
 
 	dev  = &pdev->dev;
 	node = pdev->dev.of_node;
+
+	slave = kzalloc(sizeof(struct spi_slave),GFP_KERNEL);
+
+	if (slave == NULL){
+		printk(KERN_INFO "slave allocation failed \n");
+	}
 
 	/*
 	 * here allocate memory for slave structure
@@ -66,6 +88,7 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	 *
 	 * and here I have to fill this structure
 	 */
+
 
 	//platform_set_drvdata(pdev,slave);
 	//mcspi = dev_get_drvdata(&slave->dev);
@@ -115,25 +138,37 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	cp_res.start += regs_offset;
 	cp_res.end   += regs_offset;
 
-	//printk(KERN_INFO "id=%d \n", id);
-	printk(KERN_INFO "start:%x \n",		cp_res.start);
-	printk(KERN_INFO "end:%x \n",		cp_res.end);
-	printk(KERN_INFO "regs_offset=%d \n",	regs_offset);
-	printk(KERN_INFO "memory_depth=%d \n",	memory_depth);
-	printk(KERN_INFO "num_cs=%d \n",	num_cs);
-
 	void __iomem *base = devm_ioremap_resource(&pdev->dev, &cp_res);
 
 	if (IS_ERR(&base)){
 		printk(KERN_INFO "base addres ioremap error!!");
 	}
 
-	//printk(KERN_INFO "MCSPI_REVISION:%x \n",mcspi_slave_read_reg(
+	slave->base		= base;
+	slave->dev		= dev;
+	slave->fifo_depth	= memory_depth;
+	slave->num_cs		= num_cs;
+	slave->start		= cp_res.start;
+	slave->end		= cp_res.end;
+	slave->reg_offset	= regs_offset;
+
+	platform_set_drvdata(pdev,slave);
 
 	return ret;
 }
 
 static int mcspi_slave_remove(struct platform_device *pdev){
+
+	struct spi_slave *slave;
+
+	slave = platform_get_drvdata(pdev);
+
+	printk(KERN_INFO "start:%x \n",		slave->start);
+	printk(KERN_INFO "end:%x \n",		slave->end);
+	printk(KERN_INFO "regs_offset=%d \n",	slave->reg_offset);
+	printk(KERN_INFO "memory_depth=%d \n",	slave->fifo_depth);
+	printk(KERN_INFO "num_cs=%d \n",	slave->num_cs);
+
 	printk(KERN_INFO "mcspi_slave: remove\n");
 	return 0;
 }
