@@ -27,8 +27,8 @@
         __overlay__ {
              status = "okay";
              pinctrl-names = "default";
-             pinctrl-0 = <&spi1_pins_s0>;   
-             memory_depth = <36>;
+             pinctrl-0 = <&spi1_pins_s0>;
+             fifo_depth = <36>;
         };
     };
 };

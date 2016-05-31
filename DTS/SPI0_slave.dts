@@ -35,7 +35,7 @@
              status = "okay";
              pinctrl-names = "default";
              pinctrl-0 = <&spi0_pins_s0>;
-             memory_depth = <34>;
+             fifo_depth = <34>;
         };
     };
 };
