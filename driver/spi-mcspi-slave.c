@@ -69,11 +69,24 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 	writel_relaxed(val, &base + idx);
 }
 
+static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
+{
+	u32		l;
+
+	pr_info("%s: set slave mode\n", DRIVER_NAME);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+	pr_info("MCSPI_MODULCTRL:%x\n", l);
+}
+
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int		ret = 0;
 
+	pr_info("%s: slave setup", DRIVER_NAME);
+
 	/*here set mcspi controller in slave mode and more setting*/
+	mcspi_slave_set_slave_mode(slave);
 
 	return ret;
 }
@@ -113,9 +126,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						fifo_depth;
 	u32						num_cs;
 	u32						bits_per_word;
-	void __iomem					*base;
 
-	pr_info("mcspi_slave: Entry probe\n");
+	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
 	dev  = &pdev->dev;
 	node = pdev->dev.of_node;
@@ -168,7 +180,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	memcpy(&cp_res, res, sizeof(struct resource));
 
 	if (res == NULL) {
-		pr_err("res not availablee\n");
+		pr_err("%s: res not availablee\n", DRIVER_NAME);
 		return -ENODEV;
 	}
 
@@ -179,14 +191,14 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	cp_res.start += regs_offset;
 	cp_res.end   += regs_offset;
 
-	base = devm_ioremap_resource(&pdev->dev, &cp_res);
+	slave->base = devm_ioremap_resource(&pdev->dev, &cp_res);
 
-	if (IS_ERR(&base)) {
-		pr_err("base addres ioremap error!!");
+	if (IS_ERR(&slave->base)) {
+		pr_err("%s: base addres ioremap error!!", DRIVER_NAME);
+		ret = PTR_ERR(slave->base);
 		return -ENODEV;
 	}
 
-	slave->base		= base;
 	slave->dev		= dev;
 	slave->fifo_depth	= fifo_depth;
 	slave->num_cs		= num_cs;
@@ -197,7 +209,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, slave);
 
-	mcspi_slave_setup(slave);
+	ret = mcspi_slave_setup(slave);
 
 	return ret;
 }
@@ -208,16 +220,16 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
-	pr_info("start:%x\n",	slave->start);
-	pr_info("end:%x\n", slave->end);
-	pr_info("regs_offset=%d\n", slave->reg_offset);
-	pr_info("memory_depth=%d\n", slave->fifo_depth);
-	pr_info("num_cs=%d\n", slave->num_cs);
-	pr_info("bits_per_word=%d\n", slave->bits_per_word);
+	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
+	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
+	pr_info("%s: regs_offset=%d\n", DRIVER_NAME, slave->reg_offset);
+	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
+	pr_info("%s: num_cs=%d\n", DRIVER_NAME, slave->num_cs);
+	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
 
 	kfree(slave);
 
-	pr_info("mcspi_slave: remove\n");
+	pr_info("%s: remove\n", DRIVER_NAME);
 	return 0;
 }
 
@@ -234,13 +246,15 @@ static int __init mcspi_slave_init(void)
 {
 	int ret;
 
-	pr_info("mcspi_slave: init\n");
+	pr_info("%s: init\n", DRIVER_NAME);
 	ret = platform_driver_register(&mcspi_slave_driver);
 
 	if (ret == 0)
-		pr_info("mcspi_slave: platform driver register ok\n");
+		pr_info("%s: platform driver register ok\n",
+			DRIVER_NAME);
 	else
-		pr_err("mcspi_slave: platform driver register error\n");
+		pr_err("%s: platform driver register error\n",
+		       DRIVER_NAME);
 
 	return ret;
 }
@@ -249,7 +263,7 @@ static void __exit mcspi_slave_exit(void)
 {
 	platform_driver_unregister(&mcspi_slave_driver);
 
-	pr_info("mcspi_slave: exit\n");
+	pr_info("%s: exit\n", DRIVER_NAME);
 }
 
 module_init(mcspi_slave_init);
