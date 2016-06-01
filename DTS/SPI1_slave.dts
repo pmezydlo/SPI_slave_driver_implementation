@@ -29,6 +29,7 @@
              pinctrl-names = "default";
              pinctrl-0 = <&spi1_pins_s0>;
              fifo_depth = <36>;
+             bits_per_word = <16>;
         };
     };
 };

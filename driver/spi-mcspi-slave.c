@@ -48,12 +48,12 @@
 struct spi_slave {
 	struct	device		*dev;
 	void	__iomem		*base;
-	int			fifo_depth;
-	int			num_cs;
+	u32			fifo_depth;
+	u32			num_cs;
 	u32			start;
 	u32			end;
 	u32			reg_offset;
-	u8			bits_per_word;
+	u32			bits_per_word;
 	void			*TX_buf;
 	void			*RX_buf;
 };
@@ -83,6 +83,7 @@ static struct mcspi_slave_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_SLAVE_REG_OFFSET,
 	.fifo_depth	= SPI_MCSPI_SLAVE_FIFO_DEPTH,
 	.num_cs		= SPI_MCSPI_SLAVE_NUM_CS,
+	.bits_per_word	= SPI_MCSPI_SLAVE_BITS_PER_WORD,
 };
 
 static const struct of_device_id mcspi_slave_of_match[] = {
@@ -109,9 +110,9 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	struct spi_slave				*slave;
 
-	unsigned int					fifo_depth;
-	unsigned int					num_cs;
-
+	u32						fifo_depth;
+	u32						num_cs;
+	u32						bits_per_word;
 	void __iomem					*base;
 
 	pr_info("mcspi_slave: Entry probe\n");
@@ -146,15 +147,17 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 		num_cs = 1;
 		fifo_depth = 32;
+		bits_per_word = 8;
 
-		of_property_read_u32(node, "memory_depth", &fifo_depth);
-
+		of_property_read_u32(node, "fifo_depth", &fifo_depth);
 		of_property_read_u32(node, "ti,spi-num-cs", &num_cs);
+		of_property_read_u32(node, "bits_per_word", &bits_per_word);
 
 	} else {/*default setting from pdata*/
 		pdata = dev_get_platdata(&pdev->dev);
 		fifo_depth = pdata->fifo_depth;
 		num_cs = pdata->num_cs;
+		bits_per_word = pdata->bits_per_word;
 	}
 
 	regs_offset = pdata->regs_offset;
@@ -190,6 +193,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->start		= cp_res.start;
 	slave->end		= cp_res.end;
 	slave->reg_offset	= regs_offset;
+	slave->bits_per_word	= bits_per_word;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -209,6 +213,7 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	pr_info("regs_offset=%d\n", slave->reg_offset);
 	pr_info("memory_depth=%d\n", slave->fifo_depth);
 	pr_info("num_cs=%d\n", slave->num_cs);
+	pr_info("bits_per_word=%d\n", slave->bits_per_word);
 
 	kfree(slave);
 
@@ -232,7 +237,7 @@ static int __init mcspi_slave_init(void)
 	pr_info("mcspi_slave: init\n");
 	ret = platform_driver_register(&mcspi_slave_driver);
 
-	if (ret != 0)
+	if (ret == 0)
 		pr_info("mcspi_slave: platform driver register ok\n");
 	else
 		pr_err("mcspi_slave: platform driver register error\n");
