@@ -121,10 +121,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
 
-	if (slave == NULL) {
-		/*pr_err("slave allocation failed\n");*/
+	if (slave == NULL)
 		return -ENOMEM;
-	}
 
 	/*
 	 * here allocate memory for slave structure
@@ -167,7 +165,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	memcpy(&cp_res, res, sizeof(struct resource));
 
 	if (res == NULL) {
-		pr_dbg("res not availablee\n");
+		pr_err("res not availablee\n");
 		return -ENODEV;
 	}
 
