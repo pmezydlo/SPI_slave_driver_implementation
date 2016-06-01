@@ -25,5 +25,8 @@ script:
   - sudo make -j3 modules
 
   - cd $MYHOME/
-  - sudo make
 
+  - sudo chmod +x $DST_KERNEL/scripts/checkpatch.pl
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f $MYHOME/driver/spi-mcspi-slave.*
+
+  - sudo make

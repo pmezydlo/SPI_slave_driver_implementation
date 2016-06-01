@@ -73,15 +73,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int		ret = 0;
 
-	//here set mcspi controller in slave mode and more setting
-
-
-
+	/*here set mcspi controller in slave mode and more setting*/
 
 	return ret;
 }
-
-
 
  /* default platform value located in .h file*/
 static struct mcspi_slave_platform_config mcspi_slave_pdata = {
@@ -92,16 +87,15 @@ static struct mcspi_slave_platform_config mcspi_slave_pdata = {
 
 static const struct of_device_id mcspi_slave_of_match[] = {
 	{
-            .compatible = "ti,omap4-mcspi",
-            .data = &mcspi_slave_pdata,
-        },
-	{},
+		.compatible = "ti,omap4-mcspi",
+		.data = &mcspi_slave_pdata,
+	},
+	{ }
 };
 MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
-static int mcspi_slave_probe(struct platform_device *pdev){
-	printk(KERN_INFO "mcspi_slave: Entry probe\n");
-
+static int mcspi_slave_probe(struct platform_device *pdev)
+{
 	struct device					*dev;
 	struct device_node				*node;
 
@@ -115,13 +109,21 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
 	struct spi_slave				*slave;
 
+	unsigned int					fifo_depth;
+	unsigned int					num_cs;
+
+	void __iomem					*base;
+
+	pr_info("mcspi_slave: Entry probe\n");
+
 	dev  = &pdev->dev;
 	node = pdev->dev.of_node;
 
-	slave = kzalloc(sizeof(struct spi_slave),GFP_KERNEL);
+	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
 
-	if (slave == NULL){
-		printk(KERN_INFO "slave allocation failed \n");
+	if (slave == NULL) {
+		/*pr_err("slave allocation failed\n");*/
+		return -ENOMEM;
 	}
 
 	/*
@@ -130,26 +132,20 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	 * I don't know what to put in it
 	 *
 	 * and here I have to fill this structure
-	 */
-
-
-	//platform_set_drvdata(pdev,slave);
-	//mcspi = dev_get_drvdata(&slave->dev);
-
-	/*
+	 *
 	 *  tell if an of_device structure has a metching
 	 */
 
 	match = of_match_device(mcspi_slave_of_match, dev);
 
-	unsigned int	fifo_depth;
-	unsigned int	num_cs;
-
-	if (match){// user setting from dts
+	if (match) {/* user setting from dts*/
 		pdata = match->data;
 
-		//default value num_cs and memory_depth
-		//when this value is not define in dts
+		/*
+		 *default value num_cs and memory_depth
+		 *when this value is not define in dts
+		 */
+
 		num_cs = 1;
 		fifo_depth = 32;
 
@@ -157,33 +153,36 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 
 		of_property_read_u32(node, "ti,spi-num-cs", &num_cs);
 
-	}else{//default setting from pdata
+	} else {/*default setting from pdata*/
 		pdata = dev_get_platdata(&pdev->dev);
 		fifo_depth = pdata->fifo_depth;
 		num_cs = pdata->num_cs;
-
 	}
 
 	regs_offset = pdata->regs_offset;
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	//copy resources because base address is changed
-	memcpy(&cp_res,res,sizeof(struct resource));
 
-	if (res == NULL){
-		printk(KERN_INFO "res not availablee \n");
+	/*copy resources because base address is changed*/
+	memcpy(&cp_res, res, sizeof(struct resource));
+
+	if (res == NULL) {
+		pr_dbg("res not availablee\n");
+		return -ENODEV;
 	}
 
-	//driver is increment allways when omap2 driver is install
-	//base addres is not correct when install a driver more times
-	//but when resources is copied it's ok
+	/* driver is increment allways when omap2 driver is install
+	 * base addres is not correct when install a driver more times
+	 * but when resources is copied it's ok
+	 */
 	cp_res.start += regs_offset;
 	cp_res.end   += regs_offset;
 
-	void __iomem *base = devm_ioremap_resource(&pdev->dev, &cp_res);
+	base = devm_ioremap_resource(&pdev->dev, &cp_res);
 
-	if (IS_ERR(&base)){
-		printk(KERN_INFO "base addres ioremap error!!");
+	if (IS_ERR(&base)) {
+		pr_err("base addres ioremap error!!");
+		return -ENODEV;
 	}
 
 	slave->base		= base;
@@ -194,26 +193,28 @@ static int mcspi_slave_probe(struct platform_device *pdev){
 	slave->end		= cp_res.end;
 	slave->reg_offset	= regs_offset;
 
-	platform_set_drvdata(pdev,slave);
+	platform_set_drvdata(pdev, slave);
+
+	mcspi_slave_setup(slave);
 
 	return ret;
 }
 
-static int mcspi_slave_remove(struct platform_device *pdev){
-
+static int mcspi_slave_remove(struct platform_device *pdev)
+{
 	struct spi_slave *slave;
 
 	slave = platform_get_drvdata(pdev);
 
-	printk(KERN_INFO "start:%x \n",		slave->start);
-	printk(KERN_INFO "end:%x \n",		slave->end);
-	printk(KERN_INFO "regs_offset=%d \n",	slave->reg_offset);
-	printk(KERN_INFO "memory_depth=%d \n",	slave->fifo_depth);
-	printk(KERN_INFO "num_cs=%d \n",	slave->num_cs);
+	pr_info("start:%x\n",	slave->start);
+	pr_info("end:%x\n", slave->end);
+	pr_info("regs_offset=%d\n", slave->reg_offset);
+	pr_info("memory_depth=%d\n", slave->fifo_depth);
+	pr_info("num_cs=%d\n", slave->num_cs);
 
 	kfree(slave);
 
-	printk(KERN_INFO "mcspi_slave: remove\n");
+	pr_info("mcspi_slave: remove\n");
 	return 0;
 }
 
@@ -226,23 +227,26 @@ static struct platform_driver mcspi_slave_driver = {
 	},
 };
 
-static int __init mcspi_slave_init(void){
-        int ret;
-        printk(KERN_INFO "mcspi_slave: init \n");
+static int __init mcspi_slave_init(void)
+{
+	int ret;
 
+	pr_info("mcspi_slave: init\n");
 	ret = platform_driver_register(&mcspi_slave_driver);
 
-        if (ret != 0)
-		printk(KERN_INFO "mcspi_slave: platform driver register ok \n");
+	if (ret != 0)
+		pr_info("mcspi_slave: platform driver register ok\n");
+	else
+		pr_err("mcspi_slave: platform driver register error\n");
 
 	return ret;
 }
 
-static void __exit mcspi_slave_exit(void){
+static void __exit mcspi_slave_exit(void)
+{
 	platform_driver_unregister(&mcspi_slave_driver);
 
-	printk(KERN_INFO "mcspi_slave: exit \n");
-	return;
+	pr_info("mcspi_slave: exit\n");
 }
 
 module_init(mcspi_slave_init);
