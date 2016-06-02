@@ -11,35 +11,38 @@
 
 #include "spi-mcspi-slave.h"
 
-#define MCSPI_SYSCONFIG 0x10
-#define MCSPI_SYSSTATUS 0x14
-#define MCSPI_IRQSTATUS 0x18
-#define MCSPI_IRQENABLE 0x1C
-#define MCSPI_SYST	0x24
-#define MCSPI_MODULCTRL	0x28
-#define MCSPI_CH0CONF	0x2C
-#define MCSPI_CH0STAT	0x30
-#define MCSPI_CH0CTRL	0x34
-#define MCSPI_TX0	0x38
-#define MCSPI_RX0	0x3C
-#define MCSPI_CH1CONF	0x40
-#define MCSPI_CH1STAT	0x44
-#define MCSPI_CH1CTRL	0x48
-#define MCSPI_TX1	0x4C
-#define MCSPI_RX1	0x50
-#define MCSPI_CH2CONF	0x54
-#define MCSPI_CH2STAT	0x58
-#define MCSPI_CH2CTRL	0x5C
-#define MCSPI_TX2	0x60
-#define MCSPI_RX2	0x64
-#define MCSPI_CH3CONF	0x68
-#define MCSPI_CH3STAT	0x6C
-#define MCSPI_CH3CTRL	0x70
-#define MCSPI_TX3	0x74
-#define MCSPI_RX3	0x78
-#define MCSPI_XFERLEVEL	0x7C
-#define MCSPI_DAFTX	0x80
-#define MCSPI_DAFRX	0xA0
+#define MCSPI_SYSCONFIG		0x10
+#define MCSPI_SYSSTATUS		0x14
+#define MCSPI_IRQSTATUS		0x18
+#define MCSPI_IRQENABLE		0x1C
+#define MCSPI_SYST		0x24
+#define MCSPI_MODULCTRL		0x28
+#define MCSPI_CH0CONF		0x2C
+#define MCSPI_CH0STAT		0x30
+#define MCSPI_CH0CTRL		0x34
+#define MCSPI_TX0		0x38
+#define MCSPI_RX0		0x3C
+#define MCSPI_CH1CONF		0x40
+#define MCSPI_CH1STAT		0x44
+#define MCSPI_CH1CTRL		0x48
+#define MCSPI_TX1		0x4C
+#define MCSPI_RX1		0x50
+#define MCSPI_CH2CONF		0x54
+#define MCSPI_CH2STAT		0x58
+#define MCSPI_CH2CTRL		0x5C
+#define MCSPI_TX2		0x60
+#define MCSPI_RX2		0x64
+#define MCSPI_CH3CONF		0x68
+#define MCSPI_CH3STAT		0x6C
+#define MCSPI_CH3CTRL		0x70
+#define MCSPI_TX3		0x74
+#define MCSPI_RX3		0x78
+#define MCSPI_XFERLEVEL		0x7C
+#define MCSPI_DAFTX		0x80
+#define MCSPI_DAFRX		0xA0
+
+#define MCSPI_MODULCTRL_MS	BIT(2)
+#define MCSPI_MODULCTRL_PIN34	BIT(1)
 
 /*
  * this structure describe a device
@@ -65,9 +68,9 @@ static inline unsigned int mcspi_slave_read_reg(void __iomem *base, int idx)
 }
 
 static inline void mcspi_slave_write_reg(void __iomem *base,
-		int idx, unsigned int val)
+		u32 idx, u32 val)
 {
-	writel_relaxed(val, &base + idx);
+	writel_relaxed(val, base + idx);
 }
 
 static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
@@ -77,7 +80,35 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	pr_info("%s: set slave mode\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+
+	/*set bit(2) in modulctrl, spi is set in slave mode*/
+	l |= MCSPI_MODULCTRL_MS;
+
 	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+}
+
+static void mcspi_slave_set_cs_sensitive(struct spi_slave *slave)
+{
+	u32		l;
+
+	pr_info("%s: set cs sensitive", DRIVER_NAME);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+
+	/*
+	 * set bit(1) in modulctrl, spi wtihout cs line, only enabled
+	 * clear bit(1) in modulctrl, spi with cs line,
+	 * enable if cs is set
+	 */
+
+	if (slave->cs_sensitive == 0)
+		l |= MCSPI_MODULCTRL_PIN34;
+	else
+		l &= ~MCSPI_MODULCTRL_PIN34;
+
+	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
 static int mcspi_slave_setup(struct spi_slave *slave)
@@ -88,6 +119,7 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	/*here set mcspi controller in slave mode and more setting*/
 	mcspi_slave_set_slave_mode(slave);
+	mcspi_slave_set_cs_sensitive(slave);
 
 	return ret;
 }
