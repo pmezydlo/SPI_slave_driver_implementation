@@ -52,6 +52,7 @@ struct spi_slave {
 	u32			num_cs;
 	u32			start;
 	u32			end;
+	u32			cs_sensitive;
 	u32			reg_offset;
 	u32			bits_per_word;
 	void			*TX_buf;
@@ -76,7 +77,7 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	pr_info("%s: set slave mode\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
-	pr_info("MCSPI_MODULCTRL:%x\n", l);
+	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
 }
 
 static int mcspi_slave_setup(struct spi_slave *slave)
@@ -97,6 +98,7 @@ static struct mcspi_slave_platform_config mcspi_slave_pdata = {
 	.fifo_depth	= SPI_MCSPI_SLAVE_FIFO_DEPTH,
 	.num_cs		= SPI_MCSPI_SLAVE_NUM_CS,
 	.bits_per_word	= SPI_MCSPI_SLAVE_BITS_PER_WORD,
+	.cs_sensitive	= SPI_MCSPI_SLAVE_CS_SENSITIVE,
 };
 
 static const struct of_device_id mcspi_slave_of_match[] = {
@@ -126,6 +128,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						fifo_depth;
 	u32						num_cs;
 	u32						bits_per_word;
+	u32						cs_sensitive;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -160,16 +163,19 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		num_cs = 1;
 		fifo_depth = 32;
 		bits_per_word = 8;
+		cs_sensitive = 0;
 
 		of_property_read_u32(node, "fifo_depth", &fifo_depth);
 		of_property_read_u32(node, "ti,spi-num-cs", &num_cs);
 		of_property_read_u32(node, "bits_per_word", &bits_per_word);
+		of_property_read_u32(node, "cs_sensitive", &cs_sensitive);
 
 	} else {/*default setting from pdata*/
 		pdata = dev_get_platdata(&pdev->dev);
 		fifo_depth = pdata->fifo_depth;
 		num_cs = pdata->num_cs;
 		bits_per_word = pdata->bits_per_word;
+		cs_sensitive = pdata->cs_sensitive;
 	}
 
 	regs_offset = pdata->regs_offset;
@@ -206,6 +212,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->end		= cp_res.end;
 	slave->reg_offset	= regs_offset;
 	slave->bits_per_word	= bits_per_word;
+	slave->cs_sensitive	= cs_sensitive;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -226,6 +233,7 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
 	pr_info("%s: num_cs=%d\n", DRIVER_NAME, slave->num_cs);
 	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
+	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 
 	kfree(slave);
 
