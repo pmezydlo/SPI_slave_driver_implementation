@@ -16,41 +16,47 @@
 #define SPI_MCSPI_SLAVE_CS_SENSITIVE	0
 #define SPI_MCSPI_SLAVE_CS_POLARITY	0
 
-#define MCSPI_SYSCONFIG		0x10
-#define MCSPI_SYSSTATUS		0x14
-#define MCSPI_IRQSTATUS		0x18
-#define MCSPI_IRQENABLE		0x1C
-#define MCSPI_SYST		0x24
-#define MCSPI_MODULCTRL		0x28
-#define MCSPI_CH0CONF		0x2C
-#define MCSPI_CH0STAT		0x30
-#define MCSPI_CH0CTRL		0x34
-#define MCSPI_TX0		0x38
-#define MCSPI_RX0		0x3C
-#define MCSPI_CH1CONF		0x40
-#define MCSPI_CH1STAT		0x44
-#define MCSPI_CH1CTRL		0x48
-#define MCSPI_TX1		0x4C
-#define MCSPI_RX1		0x50
-#define MCSPI_CH2CONF		0x54
-#define MCSPI_CH2STAT		0x58
-#define MCSPI_CH2CTRL		0x5C
-#define MCSPI_TX2		0x60
-#define MCSPI_RX2		0x64
-#define MCSPI_CH3CONF		0x68
-#define MCSPI_CH3STAT		0x6C
-#define MCSPI_CH3CTRL		0x70
-#define MCSPI_TX3		0x74
-#define MCSPI_RX3		0x78
-#define MCSPI_XFERLEVEL		0x7C
-#define MCSPI_DAFTX		0x80
-#define MCSPI_DAFRX		0xA0
+#define MCSPI_SYSCONFIG			0x10
+#define MCSPI_SYSSTATUS			0x14
+#define MCSPI_IRQSTATUS			0x18
+#define MCSPI_IRQENABLE			0x1C
+#define MCSPI_SYST			0x24
+#define MCSPI_MODULCTRL			0x28
+#define MCSPI_CH0CONF			0x2C
+#define MCSPI_CH0STAT			0x30
+#define MCSPI_CH0CTRL			0x34
+#define MCSPI_TX0			0x38
+#define MCSPI_RX0			0x3C
+#define MCSPI_CH1CONF			0x40
+#define MCSPI_CH1STAT			0x44
+#define MCSPI_CH1CTRL			0x48
+#define MCSPI_TX1			0x4C
+#define MCSPI_RX1			0x50
+#define MCSPI_CH2CONF			0x54
+#define MCSPI_CH2STAT			0x58
+#define MCSPI_CH2CTRL			0x5C
+#define MCSPI_TX2			0x60
+#define MCSPI_RX2			0x64
+#define MCSPI_CH3CONF			0x68
+#define MCSPI_CH3STAT			0x6C
+#define MCSPI_CH3CTRL			0x70
+#define MCSPI_TX3			0x74
+#define MCSPI_RX3			0x78
+#define MCSPI_XFERLEVEL			0x7C
+#define MCSPI_DAFTX			0x80
+#define MCSPI_DAFRX			0xA0
 
-#define MCSPI_MODULCTRL_MS	BIT(2)
-#define MCSPI_MODULCTRL_PIN34	BIT(1)
-#define MCSPI_CHCTRL_EN		BIT(0)
-#define MCSPI_CHCONF_EPOL	BIT(6)
-#define MCSPI_CHCONF_TRM	(0x03 << 12)
+#define MCSPI_MODULCTRL_MS		BIT(2)
+#define MCSPI_MODULCTRL_PIN34		BIT(1)
+#define MCSPI_CHCTRL_EN			BIT(0)
+#define MCSPI_CHCONF_EPOL		BIT(6)
+#define MCSPI_CHCONF_TRM		(0x03 << 12)
+#define MCSPI_CHCONF_WL			(0x1F << 7)
+
+#define MCSPI_CHCONF_WL_8BIT_MASK	(0x07 << 7)
+#define MCSPI_CHCONF_WL_16BIT_MASK	(0x0F << 7)
+#define MCSPI_CHCONF_WL_32BIT_MASK	(0x1F << 7)
+
 
 /*
  * this structure describe a device
@@ -81,7 +87,7 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 	writel_relaxed(val, base + idx);
 }
 
-static void mcspi_slave_enabled(struct spi_slave *slave)
+static void mcspi_slave_enable(struct spi_slave *slave)
 {
 	u32		l;
 
@@ -90,12 +96,12 @@ static void mcspi_slave_enabled(struct spi_slave *slave)
 
 	/*set bit(0) in ch0ctrl, spi is enabled*/
 	l |= MCSPI_CHCTRL_EN;
-	pr_info("%s: MCSPI_CH0CTRL:%x\n", DRIVER_NAME, l);
+	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
 
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
 
-static void mcspi_slave_disabled(struct spi_slave *slave)
+static void mcspi_slave_disable(struct spi_slave *slave)
 {
 	u32		l;
 
@@ -104,7 +110,7 @@ static void mcspi_slave_disabled(struct spi_slave *slave)
 
 	/*clr bit(0) in ch0ctrl, spi is enabled*/
 	l &= ~MCSPI_CHCTRL_EN;
-	pr_info("%s: MCSPI_CH0CTRL:%x\n", DRIVER_NAME, l);
+	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
 
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
@@ -126,7 +132,20 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	 */
 	l &= ~MCSPI_CHCONF_TRM;
 
-	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
+	/*
+	 * available is only 8 16 and 32 bits per word
+	 * before setting clear all WL bits
+	 */
+	l &= ~MCSPI_CHCONF_WL;
+
+	if (slave->bits_per_word == 32)
+		l |= MCSPI_CHCONF_WL_8BIT_MASK;
+	else if (slave->bits_per_word == 16)
+		l |= MCSPI_CHCONF_WL_16BIT_MASK;
+	else
+		l |= MCSPI_CHCONF_WL_8BIT_MASK;
+
+	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
@@ -159,7 +178,7 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	else
 		l &= ~MCSPI_MODULCTRL_PIN34;
 
-	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
+	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
@@ -170,10 +189,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 	pr_info("%s: slave setup", DRIVER_NAME);
 
 	/*here set mcspi controller in slave mode and more setting*/
-	mcspi_slave_disabled(slave);
+	mcspi_slave_disable(slave);
 	mcspi_slave_set_slave_mode(slave);
 	mcspi_slave_set_cs(slave);
-	mcspi_slave_enabled(slave);
+	mcspi_slave_enable(slave);
 	return ret;
 }
 
