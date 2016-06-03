@@ -46,6 +46,7 @@
 #define MCSPI_DAFTX			0x80
 #define MCSPI_DAFRX			0xA0
 
+#define MCSPI_SYSSTATUS_RESETDONE	BIT(0)
 #define MCSPI_MODULCTRL_MS		BIT(2)
 #define MCSPI_MODULCTRL_PIN34		BIT(1)
 #define MCSPI_CHCTRL_EN			BIT(0)
@@ -56,7 +57,6 @@
 #define MCSPI_CHCONF_WL_8BIT_MASK	(0x07 << 7)
 #define MCSPI_CHCONF_WL_16BIT_MASK	(0x0F << 7)
 #define MCSPI_CHCONF_WL_32BIT_MASK	(0x1F << 7)
-
 
 /*
  * this structure describe a device
@@ -91,7 +91,7 @@ static void mcspi_slave_enable(struct spi_slave *slave)
 {
 	u32		l;
 
-	pr_info("%s: spi is enabled", DRIVER_NAME);
+	pr_info("%s: spi is enabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
 
 	/*set bit(0) in ch0ctrl, spi is enabled*/
@@ -153,7 +153,7 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 {
 	u32		l;
 
-	pr_info("%s: set cs sensitive and polarity", DRIVER_NAME);
+	pr_info("%s: set cs sensitive and polarity\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
@@ -185,14 +185,28 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int		ret = 0;
+	u32		l;
 
-	pr_info("%s: slave setup", DRIVER_NAME);
+	pr_info("%s: slave setup\n", DRIVER_NAME);
 
-	/*here set mcspi controller in slave mode and more setting*/
-	mcspi_slave_disable(slave);
-	mcspi_slave_set_slave_mode(slave);
-	mcspi_slave_set_cs(slave);
-	mcspi_slave_enable(slave);
+	/*verification status bit(0) in MCSPI system status register*/
+	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
+
+	pr_info("%s: MCSPI_SYSSTATUS:0x%x\n", DRIVER_NAME, l);
+
+	if (l & MCSPI_SYSSTATUS_RESETDONE) {
+		pr_info("%s: controller ready for setting\n",
+			DRIVER_NAME);
+
+		/*here set mcspi controller in slave mode and more setting*/
+		mcspi_slave_disable(slave);
+		mcspi_slave_set_slave_mode(slave);
+		mcspi_slave_set_cs(slave);
+		mcspi_slave_enable(slave);
+	} else
+		pr_info("%s: internal module reset is on-going\n",
+			DRIVER_NAME);
+
 	return ret;
 }
 
@@ -317,7 +331,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
 	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
-	pr_info("%s: regs_offset=%d\n", DRIVER_NAME, slave->reg_offset);
+	pr_info("%s: regs_offset=%x\n", DRIVER_NAME, slave->reg_offset);
 	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
 	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
