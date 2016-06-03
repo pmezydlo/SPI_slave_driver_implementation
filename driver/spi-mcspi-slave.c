@@ -48,6 +48,9 @@
 
 #define MCSPI_MODULCTRL_MS	BIT(2)
 #define MCSPI_MODULCTRL_PIN34	BIT(1)
+#define MCSPI_CHCTRL_EN		BIT(0)
+#define MCSPI_CHCONF_EPOL	BIT(6)
+#define MCSPI_CHCONF_TRM	(0x03 << 12)
 
 /*
  * this structure describe a device
@@ -78,6 +81,34 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 	writel_relaxed(val, base + idx);
 }
 
+static void mcspi_slave_enabled(struct spi_slave *slave)
+{
+	u32		l;
+
+	pr_info("%s: spi is enabled", DRIVER_NAME);
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
+
+	/*set bit(0) in ch0ctrl, spi is enabled*/
+	l |= MCSPI_CHCTRL_EN;
+	pr_info("%s: MCSPI_CH0CTRL:%x\n", DRIVER_NAME, l);
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
+}
+
+static void mcspi_slave_disabled(struct spi_slave *slave)
+{
+	u32		l;
+
+	pr_info("%s: spi is disabled", DRIVER_NAME);
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
+
+	/*clr bit(0) in ch0ctrl, spi is enabled*/
+	l &= ~MCSPI_CHCTRL_EN;
+	pr_info("%s: MCSPI_CH0CTRL:%x\n", DRIVER_NAME, l);
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
+}
+
 static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 {
 	u32		l;
@@ -89,24 +120,40 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	/*set bit(2) in modulctrl, spi is set in slave mode*/
 	l |= MCSPI_MODULCTRL_MS;
 
+	/*
+	 * clr bit(13 and 12) in chconf,
+	 * spi is set in transmit and receive mode
+	 */
+	l &= ~MCSPI_CHCONF_TRM;
+
 	pr_info("%s: MCSPI_MODULCTRL:%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
-static void mcspi_slave_set_cs_sensitive(struct spi_slave *slave)
+static void mcspi_slave_set_cs(struct spi_slave *slave)
 {
 	u32		l;
 
-	pr_info("%s: set cs sensitive", DRIVER_NAME);
+	pr_info("%s: set cs sensitive and polarity", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+
+	/*cs polatiry
+	 * when cs_polarity is 0: MCSPI is enabled when cs line is 0
+	 * (set EPOL bit)
+	 * when cs_polarity is 1: MCSPI is enabled when cs line is 1
+	 * (clr EPOL bit)
+	 */
+	if (slave->cs_polarity == 0)
+		l |= MCSPI_CHCONF_EPOL;
+	else
+		l &= ~MCSPI_CHCONF_EPOL;
 
 	/*
 	 * set bit(1) in modulctrl, spi wtihout cs line, only enabled
 	 * clear bit(1) in modulctrl, spi with cs line,
 	 * enable if cs is set
 	 */
-
 	if (slave->cs_sensitive == 0)
 		l |= MCSPI_MODULCTRL_PIN34;
 	else
@@ -123,9 +170,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 	pr_info("%s: slave setup", DRIVER_NAME);
 
 	/*here set mcspi controller in slave mode and more setting*/
+	mcspi_slave_disabled(slave);
 	mcspi_slave_set_slave_mode(slave);
-	mcspi_slave_set_cs_sensitive(slave);
-
+	mcspi_slave_set_cs(slave);
+	mcspi_slave_enabled(slave);
 	return ret;
 }
 
@@ -248,6 +296,14 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, slave);
 
+	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
+	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
+	pr_info("%s: regs_offset=%d\n", DRIVER_NAME, slave->reg_offset);
+	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
+	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
+	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
+	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
+
 	ret = mcspi_slave_setup(slave);
 
 	return ret;
@@ -258,14 +314,6 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	struct spi_slave *slave;
 
 	slave = platform_get_drvdata(pdev);
-
-	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
-	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
-	pr_info("%s: regs_offset=%d\n", DRIVER_NAME, slave->reg_offset);
-	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
-	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
-	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
-	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 
 	kfree(slave);
 
