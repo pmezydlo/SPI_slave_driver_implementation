@@ -11,10 +11,18 @@
 
 #include <linux/platform_data/spi-omap2-mcspi.h>
 
+#define MCSPI_PIN_DIR_D0_IN_D1_OUT	0
+#define MCSPI_PIN_DIR_D0_OUT_D1_IN	1
+#define MCSPI_CS_POLARITY_ACTIVE_HIGH	1
+#define MCSPI_CS_POLARITY_ACTIVE_LOW	0
+#define MCSPI_CS_SENSITIVE_ENABLED	1
+#define MCSPI_CS_SENSITIVE_DISABLED	0
+
 #define SPI_MCSPI_SLAVE_FIFO_DEPTH	32
 #define SPI_MCSPI_SLAVE_BITS_PER_WORD	8
-#define SPI_MCSPI_SLAVE_CS_SENSITIVE	0
-#define SPI_MCSPI_SLAVE_CS_POLARITY	0
+#define SPI_MCSPI_SLAVE_CS_SENSITIVE	MCSPI_CS_SENSITIVE_ENABLED
+#define SPI_MCSPI_SLAVE_CS_POLARITY	MCSPI_CS_POLARITY_ACTIVE_LOW
+#define SPI_MCSPI_SLAVE_PIN_DIR		MCSPI_PIN_DIR_D0_IN_D1_OUT
 
 #define MCSPI_SYSCONFIG			0x10
 #define MCSPI_SYSSTATUS			0x14
@@ -58,6 +66,10 @@
 #define MCSPI_CHCONF_WL_16BIT_MASK	(0x0F << 7)
 #define MCSPI_CHCONF_WL_32BIT_MASK	(0x1F << 7)
 
+#define MCSPI_CHCONF_IS			BIT(18)
+#define MCSPI_CHCONF_DPE0		BIT(16)
+#define MCSPI_CHCONF_DPE1		BIT(17)
+
 /*
  * this structure describe a device
  *
@@ -72,6 +84,7 @@ struct spi_slave {
 	u32			fifo_depth;
 	u32			cs_sensitive;
 	u32			cs_polarity;
+	unsigned int		pin_dir;
 	void			*TX_buf;
 	void			*RX_buf;
 };
@@ -145,6 +158,17 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	else
 		l |= MCSPI_CHCONF_WL_8BIT_MASK;
 
+	/*setting a line which is selected for reception */
+	if (slave->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
+		l &= ~MCSPI_CHCONF_IS;
+		l &= ~MCSPI_CHCONF_DPE1;
+		l |= MCSPI_CHCONF_DPE0;
+	} else {
+		l |= MCSPI_CHCONF_IS;
+		l |= MCSPI_CHCONF_DPE1;
+		l &= ~MCSPI_CHCONF_DPE0;
+	}
+
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
@@ -163,7 +187,7 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	 * when cs_polarity is 1: MCSPI is enabled when cs line is 1
 	 * (clr EPOL bit)
 	 */
-	if (slave->cs_polarity == 0)
+	if (slave->cs_polarity == MCSPI_CS_POLARITY_ACTIVE_LOW)
 		l |= MCSPI_CHCONF_EPOL;
 	else
 		l &= ~MCSPI_CHCONF_EPOL;
@@ -173,10 +197,10 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	 * clear bit(1) in modulctrl, spi with cs line,
 	 * enable if cs is set
 	 */
-	if (slave->cs_sensitive == 0)
-		l |= MCSPI_MODULCTRL_PIN34;
-	else
+	if (slave->cs_sensitive == MCSPI_CS_SENSITIVE_ENABLED)
 		l &= ~MCSPI_MODULCTRL_PIN34;
+	else
+		l |= MCSPI_MODULCTRL_PIN34;
 
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
@@ -244,6 +268,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						bits_per_word;
 	u32						cs_sensitive;
 	u32						cs_polarity;
+	unsigned int					pin_dir;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -267,11 +292,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	match = of_match_device(mcspi_slave_of_match, dev);
 
-	fifo_depth = SPI_MCSPI_SLAVE_FIFO_DEPTH;
-	bits_per_word = SPI_MCSPI_SLAVE_BITS_PER_WORD;
-	cs_sensitive = SPI_MCSPI_SLAVE_CS_SENSITIVE;
-	cs_polarity = SPI_MCSPI_SLAVE_CS_POLARITY;
-
 	if (match) {/* user setting from dts*/
 		pdata = match->data;
 
@@ -279,14 +299,27 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		 *default value num_cs and memory_depth
 		 *when this value is not define in dts
 		 */
+		fifo_depth = SPI_MCSPI_SLAVE_FIFO_DEPTH;
+		bits_per_word = SPI_MCSPI_SLAVE_BITS_PER_WORD;
 
 		of_property_read_u32(node, "fifo_depth", &fifo_depth);
-		of_property_read_u32(node, "cs_polarity", &cs_polarity);
 		of_property_read_u32(node, "bits_per_word", &bits_per_word);
-		of_property_read_u32(node, "cs_sensitive", &cs_sensitive);
-	}
 
-	else {
+		if (of_get_property(node, "cs_polarity", &cs_polarity))
+			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
+		else
+			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_LOW;
+
+		if (of_get_property(node, "cs_sensitive", &cs_sensitive))
+			cs_sensitive = MCSPI_CS_SENSITIVE_DISABLED;
+		else
+			cs_sensitive = MCSPI_CS_SENSITIVE_ENABLED;
+
+		if (of_get_property(node, "pindir-D0-out-D1-in", &pin_dir))
+			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
+		else
+			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
+	} else {
 		pdata = dev_get_platdata(&pdev->dev);
 		pr_err("%s: failed to match, install DTS", DRIVER_NAME);
 	}
@@ -326,6 +359,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->reg_offset	= regs_offset;
 	slave->bits_per_word	= bits_per_word;
 	slave->cs_sensitive	= cs_sensitive;
+	slave->pin_dir		= pin_dir;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -336,6 +370,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
+	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 
 	ret = mcspi_slave_setup(slave);
 
