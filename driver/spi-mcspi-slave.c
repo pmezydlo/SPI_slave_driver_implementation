@@ -6,6 +6,7 @@
 #include <linux/platform_device.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/pm_runtime.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -54,6 +55,8 @@
 #define MCSPI_DAFTX			0x80
 #define MCSPI_DAFRX			0xA0
 
+#define SPI_AUTOSUSPEND_TIMEOUT		2000
+
 #define MCSPI_SYSSTATUS_RESETDONE	BIT(0)
 #define MCSPI_MODULCTRL_MS		BIT(2)
 #define MCSPI_MODULCTRL_PIN34		BIT(1)
@@ -89,9 +92,9 @@ struct spi_slave {
 	void			*RX_buf;
 };
 
-static inline unsigned int mcspi_slave_read_reg(void __iomem *base, int idx)
+static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
-	return readl_relaxed(&base + idx);
+	return readl_relaxed(base + idx);
 }
 
 static inline void mcspi_slave_write_reg(void __iomem *base,
@@ -212,6 +215,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 	u32		l;
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
+
+	ret = pm_runtime_get_sync(slave->dev);
+	if (ret < 0)
+		return ret;
 
 	/*verification status bit(0) in MCSPI system status register*/
 	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
@@ -345,7 +352,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	slave->base = devm_ioremap_resource(&pdev->dev, &cp_res);
 
-	if (IS_ERR(&slave->base)) {
+	if (IS_ERR(slave->base)) {
 		pr_err("%s: base addres ioremap error!!", DRIVER_NAME);
 		ret = PTR_ERR(slave->base);
 		return -ENODEV;
@@ -372,7 +379,15 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
+	pm_runtime_enable(&pdev->dev);
+
 	ret = mcspi_slave_setup(slave);
+
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
 
 	return ret;
 }
