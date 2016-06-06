@@ -7,6 +7,7 @@
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
+#include <linux/of_irq.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -87,6 +88,7 @@ struct spi_slave {
 	u32			fifo_depth;
 	u32			cs_sensitive;
 	u32			cs_polarity;
+	unsigned int		interrupt_handler;
 	unsigned int		pin_dir;
 	void			*TX_buf;
 	void			*RX_buf;
@@ -209,6 +211,16 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
+static int mcspi_slave_set_irq(struct spi_slave *slave)
+{
+	int		ret = 0;
+	u32		l;
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
+
+	return ret;
+}
+
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int		ret = 0;
@@ -234,6 +246,9 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		mcspi_slave_enable(slave);
+		ret = mcspi_slave_set_irq(slave);
+		if (ret < 0)
+			return ret;
 	} else
 		pr_info("%s: internal module reset is on-going\n",
 			DRIVER_NAME);
@@ -276,6 +291,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						cs_sensitive;
 	u32						cs_polarity;
 	unsigned int					pin_dir;
+	unsigned int					interrupt_handler;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -326,9 +342,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
 		else
 			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
+
+		interrupt_handler = irq_of_parse_and_map(node, 0);
+
 	} else {
 		pdata = dev_get_platdata(&pdev->dev);
 		pr_err("%s: failed to match, install DTS", DRIVER_NAME);
+		return -EINVAL;
 	}
 
 	regs_offset = pdata->regs_offset;
@@ -358,15 +378,16 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	slave->dev		= dev;
-	slave->fifo_depth	= fifo_depth;
-	slave->cs_polarity	= cs_polarity;
-	slave->start		= cp_res.start;
-	slave->end		= cp_res.end;
-	slave->reg_offset	= regs_offset;
-	slave->bits_per_word	= bits_per_word;
-	slave->cs_sensitive	= cs_sensitive;
-	slave->pin_dir		= pin_dir;
+	slave->dev			= dev;
+	slave->fifo_depth		= fifo_depth;
+	slave->cs_polarity		= cs_polarity;
+	slave->start			= cp_res.start;
+	slave->end			= cp_res.end;
+	slave->reg_offset		= regs_offset;
+	slave->bits_per_word		= bits_per_word;
+	slave->cs_sensitive		= cs_sensitive;
+	slave->pin_dir			= pin_dir;
+	slave->interrupt_handler	= interrupt_handler;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -378,6 +399,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
+	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->interrupt_handler);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
