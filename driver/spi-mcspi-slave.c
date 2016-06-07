@@ -8,6 +8,7 @@
 #include <linux/io.h>
 #include <linux/pm_runtime.h>
 #include <linux/of_irq.h>
+#include <linux/interrupt.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -88,7 +89,7 @@ struct spi_slave {
 	u32			fifo_depth;
 	u32			cs_sensitive;
 	u32			cs_polarity;
-	unsigned int		interrupt_handler;
+	unsigned int		irq;
 	unsigned int		pin_dir;
 	void			*TX_buf;
 	void			*RX_buf;
@@ -211,6 +212,13 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
+static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
+{
+	struct spi_slave *slave = dev_id;
+
+	return (irq_handler_t) IRQ_HANDLED;
+}
+
 static int mcspi_slave_set_irq(struct spi_slave *slave)
 {
 	int		ret = 0;
@@ -218,8 +226,16 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
 
+	ret = request_irq(slave->irq, (irq_handler_t)mcspi_slave_irq, 0,
+			  DRIVER_NAME, slave);
+
+	if (ret)
+		pr_info("%s unable to request irq:%d\n", DRIVER_NAME,
+			slave->irq);
+
 	return ret;
 }
+
 
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
@@ -291,7 +307,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						cs_sensitive;
 	u32						cs_polarity;
 	unsigned int					pin_dir;
-	unsigned int					interrupt_handler;
+	unsigned int					irq;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -343,7 +359,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		else
 			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
 
-		interrupt_handler = irq_of_parse_and_map(node, 0);
+		irq = irq_of_parse_and_map(node, 0);
 
 	} else {
 		pdata = dev_get_platdata(&pdev->dev);
@@ -387,7 +403,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->bits_per_word		= bits_per_word;
 	slave->cs_sensitive		= cs_sensitive;
 	slave->pin_dir			= pin_dir;
-	slave->interrupt_handler	= interrupt_handler;
+	slave->irq			= irq;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -399,7 +415,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
-	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->interrupt_handler);
+	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
@@ -419,7 +435,7 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	struct spi_slave *slave;
 
 	slave = platform_get_drvdata(pdev);
-
+	free_irq(slave->irq, slave);
 	kfree(slave);
 
 	pr_info("%s: remove\n", DRIVER_NAME);
