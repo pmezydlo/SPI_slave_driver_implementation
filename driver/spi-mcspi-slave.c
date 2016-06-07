@@ -75,6 +75,12 @@
 #define MCSPI_CHCONF_DPE0		BIT(16)
 #define MCSPI_CHCONF_DPE1		BIT(17)
 
+#define MCSPI_IRQ_RX0_OVERFLOW		BIT(3)
+#define MCSPI_IRQ_RX0_FULL		BIT(2)
+#define MCSPI_IRQ_TX0_UNDERFLOW		BIT(1)
+#define MCSPI_IRQ_TX0_EMPTY		BIT(0)
+#define MCSPI_IRQ_EOWKE			BIT(17)
+
 /*
  * this structure describe a device
  *
@@ -145,10 +151,14 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	/*set bit(2) in modulctrl, spi is set in slave mode*/
 	l |= MCSPI_MODULCTRL_MS;
 
+	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
+
+
 	/*
 	 * clr bit(13 and 12) in chconf,
 	 * spi is set in transmit and receive mode
 	 */
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 	l &= ~MCSPI_CHCONF_TRM;
 
 	/*
@@ -175,7 +185,7 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 		l &= ~MCSPI_CHCONF_DPE0;
 	}
 
-	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
+	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
@@ -185,7 +195,7 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 
 	pr_info("%s: set cs sensitive and polarity\n", DRIVER_NAME);
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
 	/*cs polatiry
 	 * when cs_polarity is 0: MCSPI is enabled when cs line is 0
@@ -198,6 +208,9 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	else
 		l &= ~MCSPI_CHCONF_EPOL;
 
+	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 	/*
 	 * set bit(1) in modulctrl, spi wtihout cs line, only enabled
 	 * clear bit(1) in modulctrl, spi with cs line,
@@ -216,6 +229,10 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
 	struct spi_slave *slave = dev_id;
 
+	(void)slave;
+
+	pr_info("%s: interrupt\n", DRIVER_NAME);
+
 	return (irq_handler_t) IRQ_HANDLED;
 }
 
@@ -224,18 +241,23 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	int		ret = 0;
 	u32		l;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
+	pr_info("%s: set interrupt\n", DRIVER_NAME);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
+
+	l |= MCSPI_IRQ_RX0_FULL;
 
 	ret = request_irq(slave->irq, (irq_handler_t)mcspi_slave_irq, 0,
 			  DRIVER_NAME, slave);
 
 	if (ret)
-		pr_info("%s unable to request irq:%d\n", DRIVER_NAME,
+		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
 			slave->irq);
+
+	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
 	return ret;
 }
-
 
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
