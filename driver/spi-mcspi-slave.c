@@ -188,7 +188,7 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	}
 
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
 
 static void mcspi_slave_set_cs(struct spi_slave *slave)
