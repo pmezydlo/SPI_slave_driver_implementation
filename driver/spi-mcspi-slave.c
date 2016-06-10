@@ -9,6 +9,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
+#include <linux/spi/spi.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -85,20 +86,20 @@
  * this structure describe a device
  *
  */
+
 struct spi_slave {
-	struct	device		*dev;
-	void	__iomem		*base;
-	u32			start;
-	u32			end;
-	unsigned int		reg_offset;
-	u32			bits_per_word;
-	u32			fifo_depth;
-	u32			cs_sensitive;
-	u32			cs_polarity;
-	unsigned int		irq;
-	unsigned int		pin_dir;
-	void			*TX_buf;
-	void			*RX_buf;
+	struct	device			*dev;
+	void	__iomem			*base;
+	struct	spi_transfer		*spi_transfer;
+	u32				start;
+	u32				end;
+	unsigned int			reg_offset;
+	u32				bits_per_word;
+	u32				fifo_depth;
+	u32				cs_sensitive;
+	u32				cs_polarity;
+	unsigned int			irq;
+	unsigned int			pin_dir;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -110,6 +111,40 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 		u32 idx, u32 val)
 {
 	writel_relaxed(val, base + idx);
+}
+
+static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
+{
+	struct spi_transfer		*spi_transfer;
+	u32				l;
+	int				ret;
+
+	spi_transfer = kzalloc(sizeof(struct spi_transfer), GFP_KERNEL);
+
+	if (spi_transfer == NULL)
+		return -ENOMEM;
+
+	slave->spi_transfer = spi_transfer;
+
+	spi_transfer->tx_buf = kzalloc(spi_transfer->len, GFP_KERNEL);
+	if (spi_transfer->tx_buf == NULL)
+		return -ENOMEM;
+
+	spi_transfer->rx_buf = kzalloc(spi_transfer->len, GFP_KERNEL);
+	if (spi_transfer->rx_buf == NULL)
+		return -ENOMEM;
+
+	return ret;
+}
+
+static void mcspi_slave_pio_transfer(struct spi_slave *slave)
+{
+	void __iomem			*rx_reg;
+	void __iomem			*tx_reg;
+
+	rx_reg = slave->base + MCSPI_TX0;
+	tx_reg = slave->base + MCSPI_RX0;
+
 }
 
 static void mcspi_slave_enable(struct spi_slave *slave)
@@ -282,7 +317,9 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
+		mcspi_slave_setup_pio_transfer(slave);
 		mcspi_slave_enable(slave);
+
 
 		if (ret < 0)
 			return ret;
@@ -460,9 +497,10 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 static int mcspi_slave_remove(struct platform_device *pdev)
 {
-	struct spi_slave *slave;
+	struct spi_slave	*slave;
 
 	slave = platform_get_drvdata(pdev);
+
 	free_irq(slave->irq, slave);
 	kfree(slave);
 
