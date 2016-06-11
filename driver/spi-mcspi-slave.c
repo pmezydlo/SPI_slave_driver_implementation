@@ -58,7 +58,7 @@
 #define MCSPI_DAFTX			0x80
 #define MCSPI_DAFRX			0xA0
 
-#define SPI_AUTOSUSPEND_TIMEOUT		2000
+#define SPI_AUTOSUSPEND_TIMEOUT		-1
 
 #define MCSPI_SYSSTATUS_RESETDONE	BIT(0)
 #define MCSPI_MODULCTRL_MS		BIT(2)
@@ -104,13 +104,13 @@ struct spi_slave {
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
-	return readl_relaxed(base + idx);
+	return ioread32(base + idx);
 }
 
 static inline void mcspi_slave_write_reg(void __iomem *base,
 		u32 idx, u32 val)
 {
-	writel_relaxed(val, base + idx);
+	iowrite32(val, base + idx);
 }
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
@@ -299,9 +299,6 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
-	ret = pm_runtime_get_sync(slave->dev);
-	if (ret < 0)
-		return ret;
 
 	/*verification status bit(0) in MCSPI system status register*/
 	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
@@ -475,22 +472,26 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
 
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
-	pm_runtime_enable(&pdev->dev);
 
-	ret = mcspi_slave_setup(slave);
-
-	pm_runtime_dont_use_autosuspend(&pdev->dev);
-	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
-
-	ret = request_irq(slave->irq, (irq_handler_t)mcspi_slave_irq, 0,
+	ret = devm_request_irq(&pdev->dev, slave->irq, (irq_handler_t)mcspi_slave_irq, IRQF_TRIGGER_NONE,
 			  DRIVER_NAME, slave);
 
 	if (ret)
 		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
 			slave->irq);
+
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
+	pm_runtime_enable(&pdev->dev);
+
+	ret = pm_runtime_get_sync(slave->dev);
+	if (ret < 0)
+		return ret;
+
+
+	ret = mcspi_slave_setup(slave);
+
+
 
 	return ret;
 }
@@ -500,6 +501,10 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	struct spi_slave	*slave;
 
 	slave = platform_get_drvdata(pdev);
+
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
 
 	free_irq(slave->irq, slave);
 	kfree(slave);

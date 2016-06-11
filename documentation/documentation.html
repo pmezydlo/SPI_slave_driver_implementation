@@ -102,21 +102,31 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <li>create README.md ✔</li>
 <li>prepare video presentation ✔</li>
 <li>add license file ✔</li>
+<li>skeleton LKM ✔</li>
 <li>configure vim for kernel coding style ✔</li></ul>
 </li>
 <li>
 	<p>Week 1(24 May - 31 May)</p>
-	<ul><li>skeleton LKM ✔</li>
-	<li>create debugging tool (dynamic debug) ✔</li>
-	<li>prepare test application(using spidev) ✔</li>
-	<li>preapre DTS for test application ✔</li>
-	<li>create DTS for SPI Slave Device settings ✔</li></ul>
+	<ul><li>create basic function: probe, remove, init exit ✔</li>
+<li>prepare test application(using spidev) ✔</li>
+<li>add more information about a driver works (describe main problems) ✔</li>
+<li>determinate McSPI base address (reading DTS device resources) ✔</li>
+<li>create device structure(keeps all the elements of the controller) ✔</li>
+<li>allocate memory for device ✔</li>
+<li>define McSPI register ✔</li>
+<li>function for reading and writing McSPI registers ✔</li>
+	</ul>
 </li>
+
 <li>
 	<p>Week 2(31 May - 07 June) </p>
-	<ul><li>beginning work on the driver</li>
-	<li>create function: probe, remove, init exit</li>
-	<li>implementation platform device</li></ul>
+	<ul><li>set driver in slave mode ✔</li>
+	<li>set the majority of important registers, except for those related to DMA, interrupts and fifo ✔</li>
+	<li>familiarizing myself with the basics of McSPI controller ✔</li>
+	<li>reading and writing McSPI registers ✔</li>
+	<li>synchronization (pm_runtime) ✔</li>
+	<li>clean up all kernel coding style issues ✔</li>
+	<li>resolve all warnings ✔</li></ul>
 </li>
 <li>
 	<p>Week 3(07 June - 14 June)</p>
@@ -190,10 +200,13 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 </ol>
 		
 <h2 id="am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</h2>	
-<p>AM335x ARM® Cortex™-A8 Microprocessors (MPUs) Technical Reference Manual:</p>
+<ul>
+<li>AM335x ARM® Cortex™-A8 Microprocessors (MPUs) Technical Reference Manual:</li>
 <a href="http://phytec.com/wiki/images/7/72/AM335x_techincal_reference_manual.pdf">AM335x_Techincal_Reference_Manual</a>
-<p>Multichannel Serial Port Interface Technical Reference Manual:</p>
+
+<li>Multichannel Serial Port Interface Technical Reference Manual:</li>
 <a href="McSPI_Technical_Reference_Manual.pdf">McSPI_Technical_Reference_Manual</a>
+</ul>
 
 <h2 id="books-about-linux-and-lkm">Books about Linux and LKM</h2>	
 <ul>	<li>LINUX DEVICE DRIVERS, Third Edition, Jonathan Corbet, Alessandro Rubini, and Greg Kroah-Hartman pdf is here[1]</li>
