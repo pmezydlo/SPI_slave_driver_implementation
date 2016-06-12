@@ -88,10 +88,15 @@
 #define MCSPI_SYSCONFIG_AUTOIDLE	BIT(0)
 
 #define MCSPI_IRQ_RESET			0xFFFFFFFF
-#define MCSPI_XFER_AFL			(0x1F << 8)
-#define MCSPI_XFER_AEL			(0x1F)
+#define MCSPI_XFER_AFL			(0x7 << 8)
+#define MCSPI_XFER_AEL			(0x7)
 #define MCSPI_XFER_WCNT			(0xFFFF << 16)
 
+#define MCSPI_CHCONF_FFER		BIT(28)
+#define MCSPI_CHCONF_FFEW		BIT(29)
+
+#define MCSPI_MODULCTRL_MOA		BIT(7)
+#define MCSPI_MODULCTRL_FDAA		BIT(8)
 
 struct spi_slave {
 	struct	device			*dev;
@@ -125,6 +130,8 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	u32				l;
 	int				ret;
 
+	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
+
 	spi_transfer = kzalloc(sizeof(struct spi_transfer), GFP_KERNEL);
 
 	if (spi_transfer == NULL)
@@ -142,7 +149,31 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
-	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, MCSPI_XFER_AFL);
+	l |= MCSPI_XFER_AFL;
+	l |= MCSPI_XFER_AEL;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
+
+	pr_info("%s: MCSPI_XFERLEVEL:0x%x\n", DRIVER_NAME, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
+	/*enable fifo*/
+	l |= MCSPI_CHCONF_FFER;
+	l |= MCSPI_CHCONF_FFEW;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
+	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+
+	l &= ~MCSPI_MODULCTRL_FDAA;
+
+	/*multiple word ocp access*/
+	/*l |= MCSPI_MODULCTRL_MOA;*/
+
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 
 	return ret;
 }
@@ -154,16 +185,55 @@ static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 	u32				l;
 	unsigned int			c;
 
+	pr_info("%s: pio transfer\n", DRIVER_NAME);
 
 	rx_reg = slave->base + MCSPI_TX0;
 	tx_reg = slave->base + MCSPI_RX0;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
-	c = (MCSPI_XFERLEVEL & MCSPI_XFER_WCNT) >> 16;
+	c = (l & MCSPI_XFER_WCNT) >> 16;
 
 	pr_info("%s: word count:%d\n", DRIVER_NAME, c);
+}
 
+static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
+{
+	struct spi_slave	*slave = dev_id;
+
+	mcspi_slave_pio_transfer(slave);
+
+	/*clear IRQSTATUS register*/
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, MCSPI_IRQ_RESET);
+
+	return (irq_handler_t) IRQ_HANDLED;
+}
+
+static int mcspi_slave_set_irq(struct spi_slave *slave)
+{
+	u32		l;
+	int		ret = 0;
+
+	pr_info("%s: set interrupt\n", DRIVER_NAME);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
+
+	l |= MCSPI_IRQ_RX0_FULL;
+
+	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
+
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
+
+	ret = devm_request_irq(slave->dev, slave->irq,
+				(irq_handler_t)mcspi_slave_irq,
+				IRQF_TRIGGER_NONE,
+				DRIVER_NAME, slave);
+
+	if (ret)
+		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
+			slave->irq);
+
+	return ret;
 }
 
 static void mcspi_slave_enable(struct spi_slave *slave)
@@ -206,7 +276,6 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	l |= MCSPI_MODULCTRL_MS;
 
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
-
 
 	/*
 	 * clr bit(13 and 12) in chconf,
@@ -281,44 +350,6 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
-static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
-{
-	struct spi_slave *slave = dev_id;
-	u32	l;
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_RX0);
-
-	pr_info("%s: MCSPI_RX0:%x\n", DRIVER_NAME, l);
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_RX0);
-
-	pr_info("%s: MCSPI_RX0:%x\n", DRIVER_NAME, l);
-
-	/*clear IRQSTATUS register*/
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, MCSPI_IRQ_RESET);
-
-	return (irq_handler_t) IRQ_HANDLED;
-}
-
-static int mcspi_slave_set_irq(struct spi_slave *slave)
-{
-	int		ret = 0;
-	u32		l;
-
-	pr_info("%s: set interrupt\n", DRIVER_NAME);
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
-
-	l |= MCSPI_IRQ_RX0_OVERFLOW;
-	l |= MCSPI_IRQ_RX0_FULL;
-
-	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
-
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
-	return ret;
-}
-
-
 static void mcspi_slave_setup_system(struct spi_slave *slave)
 {
 
@@ -331,7 +362,6 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
-
 	/*verification status bit(0) in MCSPI system status register*/
 	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
 
@@ -343,12 +373,12 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 		/*here set mcspi controller in slave mode and more setting*/
 		mcspi_slave_disable(slave);
+		mcspi_slave_setup_system(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
 		mcspi_slave_setup_pio_transfer(slave);
 		mcspi_slave_enable(slave);
-
 
 		if (ret < 0)
 			return ret;
@@ -504,16 +534,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
 
-
-	ret = devm_request_irq(&pdev->dev, slave->irq,
-				(irq_handler_t)mcspi_slave_irq,
-				IRQF_TRIGGER_NONE,
-				DRIVER_NAME, slave);
-
-	if (ret)
-		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
-			slave->irq);
-
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
 	pm_runtime_enable(&pdev->dev);
@@ -533,8 +553,6 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	struct spi_slave	*slave;
 
 	slave = platform_get_drvdata(pdev);
-
-	mcspi_slave_pio_transfer(slave);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
