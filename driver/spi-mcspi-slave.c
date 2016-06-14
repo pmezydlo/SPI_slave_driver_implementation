@@ -101,6 +101,10 @@
 #define MCSPI_CHSTAT_EOT		BIT(2)
 #define MCSPI_CHSTAT_TXS		BIT(1)
 #define MCSPI_CHSTAT_RXS		BIT(0)
+#define MCSPI_CHSTAT_RXFFF		BIT(6)
+#define MCSPI_CHSTAT_RXFFE		BIT(5)
+#define MCSPI_CHSTAT_TXFFF		BIT(4)
+#define MCSPI_CHSTAT_TXFFE		BIT(3)
 
 struct spi_slave {
 	struct	device			*dev;
@@ -128,7 +132,17 @@ static inline void mcspi_slave_write_reg(void __iomem *base,
 	iowrite32(val, base + idx);
 }
 
-static u32 mcspi_slave_wait_for_register_bit(void __iomem *base, u32 idx,
+static inline int mcspi_slave_bytes_per_word(int word_len)
+{
+	if (word_len <= 8)
+		return 1;
+	else if (word_len <= 16)
+		return 2;
+	else
+		return 4;
+}
+
+static int mcspi_slave_wait_for_register_bit(void __iomem *base, u32 idx,
 					     u32 bit)
 {
 	unsigned long timeout;
@@ -138,9 +152,10 @@ static u32 mcspi_slave_wait_for_register_bit(void __iomem *base, u32 idx,
 	timeout = jiffies + msecs_to_jiffies(1000);
 	while (!(ioread32(reg) & bit)) {
 		if (time_after(jiffies, timeout)) {
-			if (!(ioread32(reg) & bit))
+			if (!(ioread32(reg) & bit)) {
+				pr_info("%s: mcspi timeout!!!\n", DRIVER_NAME);
 				return -ETIMEDOUT;
-			else
+			} else
 				return 0;
 		}
 		cpu_relax();
@@ -166,7 +181,7 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 {
 	u32		l;
 
-	pr_info("%s: spi is disabled", DRIVER_NAME);
+	pr_info("%s: spi is disabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
 
 	/*clr bit(0) in ch0ctrl, spi is enabled*/
@@ -176,12 +191,11 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
 
-
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
 	struct spi_transfer		*spi_transfer;
 	u32				l;
-	int				ret;
+	int				ret = 0;
 
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
 
@@ -216,7 +230,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l |= MCSPI_CHCONF_FFER;
 	l |= MCSPI_CHCONF_FFEW;
 
-
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 
@@ -241,8 +254,6 @@ static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 	unsigned int			c;
 	int				i;
 
-	mcspi_slave_disable(slave);
-
 	pr_info("%s: pio transfer\n", DRIVER_NAME);
 
 	rx_reg = slave->base + MCSPI_TX0;
@@ -261,8 +272,6 @@ static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 	}
 
 	pr_info("%s: word count:%d\n", DRIVER_NAME, c);
-
-	mcspi_slave_enable(slave);
 }
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
@@ -297,10 +306,12 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 				(irq_handler_t)mcspi_slave_irq,
 				IRQF_TRIGGER_NONE,
 				DRIVER_NAME, slave);
-
 	if (ret)
+	{
 		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
 			slave->irq);
+		ret = -EINTR;
+	}
 
 	return ret;
 }
@@ -409,7 +420,9 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	pr_info("%s: MCSPI_SYSSTATUS:0x%x\n", DRIVER_NAME, l);
 
-	if (l & MCSPI_SYSSTATUS_RESETDONE) {
+	if (mcspi_slave_wait_for_register_bit(slave->base, MCSPI_SYSSTATUS,
+					      MCSPI_SYSSTATUS_RESETDONE) == 0) {
+
 		pr_info("%s: controller ready for setting\n",
 			DRIVER_NAME);
 
@@ -418,17 +431,45 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_setup_system(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
+
 		ret = mcspi_slave_set_irq(slave);
-		mcspi_slave_setup_pio_transfer(slave);
-		mcspi_slave_enable(slave);
 
 		if (ret < 0)
 			return ret;
-	} else
+
+		ret = mcspi_slave_setup_pio_transfer(slave);
+
+		if (ret < 0)
+			return ret;
+
+		mcspi_slave_enable(slave);
+	} else {
 		pr_info("%s: internal module reset is on-going\n",
 			DRIVER_NAME);
-
+		ret = -EIO;
+	}
 	return ret;
+}
+
+static void mcspi_slave_clean_up(struct spi_slave *slave)
+{
+	struct spi_transfer	*slave_transfer;
+
+	pr_info("%s: clean up", DRIVER_NAME);
+
+	slave_transfer = slave->spi_transfer;
+	if (slave_transfer != NULL) {
+
+		if (slave_transfer->tx_buf != NULL)
+			kfree(slave_transfer->tx_buf);
+
+		if (slave_transfer->rx_buf != NULL)
+			kfree(slave_transfer->rx_buf);
+
+		kfree(slave_transfer);
+	}
+
+	kfree(slave);
 }
 
  /* default platform value located in .h file*/
@@ -478,16 +519,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (slave == NULL)
 		return -ENOMEM;
 
-	/*
-	 * here allocate memory for slave structure
-	 * I have to write the structure of the slave device
-	 * I don't know what to put in it
-	 *
-	 * and here I have to fill this structure
-	 *
-	 *  tell if an of_device structure has a metching
-	 */
-
 	match = of_match_device(mcspi_slave_of_match, dev);
 
 	if (match) {/* user setting from dts*/
@@ -523,7 +554,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	} else {
 		pdata = dev_get_platdata(&pdev->dev);
 		pr_err("%s: failed to match, install DTS", DRIVER_NAME);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto free_slave;
 	}
 
 	regs_offset = pdata->regs_offset;
@@ -535,7 +567,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	if (res == NULL) {
 		pr_err("%s: res not availablee\n", DRIVER_NAME);
-		return -ENODEV;
+		ret = -ENODEV;
+		goto free_slave;
 	}
 
 	/* driver is increment allways when omap2 driver is install
@@ -550,7 +583,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (IS_ERR(slave->base)) {
 		pr_err("%s: base addres ioremap error!!", DRIVER_NAME);
 		ret = PTR_ERR(slave->base);
-		return -ENODEV;
+		goto free_slave;
 	}
 
 	slave->dev			= dev;
@@ -582,10 +615,24 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	ret = pm_runtime_get_sync(slave->dev);
 	if (ret < 0)
-		return ret;
-
+		goto disable_pm;
 
 	ret = mcspi_slave_setup(slave);
+	if (ret < 0)
+		goto disable_pm;
+
+	return ret;
+
+disable_pm:
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
+
+free_slave:
+	if (slave != NULL) {
+		put_device(slave->dev);
+		mcspi_slave_clean_up(slave);
+	}
 
 	return ret;
 }
@@ -596,13 +643,11 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
-	mcspi_slave_pio_transfer(slave);
+	mcspi_slave_clean_up(slave);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	kfree(slave);
 
 	pr_info("%s: remove\n", DRIVER_NAME);
 	return 0;
