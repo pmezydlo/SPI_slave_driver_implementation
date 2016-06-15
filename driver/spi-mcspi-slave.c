@@ -9,7 +9,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
-#include <linux/spi/spi.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -109,7 +108,6 @@
 struct spi_slave {
 	struct	device			*dev;
 	void	__iomem			*base;
-	struct	spi_transfer		*spi_transfer;
 	u32				start;
 	u32				end;
 	unsigned int			reg_offset;
@@ -119,6 +117,8 @@ struct spi_slave {
 	u32				cs_polarity;
 	unsigned int			irq;
 	unsigned int			pin_dir;
+	void  __iomem			*tx;
+	void  __iomem			*rx;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -193,25 +193,17 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
-	struct spi_transfer		*spi_transfer;
 	u32				l;
 	int				ret = 0;
 
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
 
-	spi_transfer = kzalloc(sizeof(struct spi_transfer), GFP_KERNEL);
-
-	if (spi_transfer == NULL)
+	slave->tx = kzalloc(slave->fifo_depth, GFP_KERNEL);
+	if (slave->tx == NULL)
 		return -ENOMEM;
 
-	slave->spi_transfer = spi_transfer;
-
-	spi_transfer->tx_buf = kzalloc(spi_transfer->len, GFP_KERNEL);
-	if (spi_transfer->tx_buf == NULL)
-		return -ENOMEM;
-
-	spi_transfer->rx_buf = kzalloc(spi_transfer->len, GFP_KERNEL);
-	if (spi_transfer->rx_buf == NULL)
+	slave->rx = kzalloc(slave->fifo_depth, GFP_KERNEL);
+	if (slave->rx == NULL)
 		return -ENOMEM;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
@@ -248,30 +240,38 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 {
-	void __iomem			*rx_reg;
-	void __iomem			*tx_reg;
 	u32				l;
 	unsigned int			c;
-	int				i;
+	u8				*rx;
 
 	pr_info("%s: pio transfer\n", DRIVER_NAME);
 
-	rx_reg = slave->base + MCSPI_TX0;
-	tx_reg = slave->base + MCSPI_RX0;
-
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
+	/*only display counter state*/
 	c = (l & MCSPI_XFER_WCNT) >> 16;
+	pr_info("%s: word count:%d\n", DRIVER_NAME, c);
 
-	for (i = 0; i < 8; i++)	{
-		mcspi_slave_wait_for_register_bit(slave->base, MCSPI_CH0STAT,
-						  MCSPI_CHSTAT_RXS);
-		l = mcspi_slave_read_reg(slave->base, MCSPI_RX0);
-		pr_info("%s: word:%x\n", DRIVER_NAME, l);
+	c = 8;
 
+	rx = slave->rx;
+
+	if (rx != NULL) {
+		{
+			c -= 1;
+			if (mcspi_slave_wait_for_register_bit(slave->base,
+							      MCSPI_CH0STAT,
+							      MCSPI_CHSTAT_RXS)
+							      < 0)
+				pr_info("%s: timeout\n", DRIVER_NAME);
+
+				*rx++ = readl_relaxed(slave->base +  MCSPI_RX0);
+				pr_info("%s: read:%02x\n", DRIVER_NAME,
+					*(rx-1));
+		} while (c);
 	}
 
-	pr_info("%s: word count:%d\n", DRIVER_NAME, c);
+
 }
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
@@ -306,8 +306,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 				(irq_handler_t)mcspi_slave_irq,
 				IRQF_TRIGGER_NONE,
 				DRIVER_NAME, slave);
-	if (ret)
-	{
+	if (ret) {
 		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
 			slave->irq);
 		ret = -EINTR;
@@ -453,21 +452,13 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 static void mcspi_slave_clean_up(struct spi_slave *slave)
 {
-	struct spi_transfer	*slave_transfer;
-
 	pr_info("%s: clean up", DRIVER_NAME);
 
-	slave_transfer = slave->spi_transfer;
-	if (slave_transfer != NULL) {
+		if (slave->tx != NULL)
+			kfree(slave->tx);
 
-		if (slave_transfer->tx_buf != NULL)
-			kfree(slave_transfer->tx_buf);
-
-		if (slave_transfer->rx_buf != NULL)
-			kfree(slave_transfer->rx_buf);
-
-		kfree(slave_transfer);
-	}
+		if (slave->rx != NULL)
+			kfree(slave->rx);
 
 	kfree(slave);
 }
