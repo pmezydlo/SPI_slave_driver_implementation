@@ -20,12 +20,19 @@
 #define MCSPI_CS_POLARITY_ACTIVE_LOW	0
 #define MCSPI_CS_SENSITIVE_ENABLED	1
 #define MCSPI_CS_SENSITIVE_DISABLED	0
+#define MCSPI_MAX_FIFO_DEPTH		64
 
-#define SPI_MCSPI_SLAVE_FIFO_DEPTH	32
+#define MCSPI_MODE_TRM			0
+#define MCSPI_MODE_RM			1
+#define MCSPI_MODE_TM			2
+
+#define SPI_MCSPI_SLAVE_FIFO_DEPTH	MCSPI_MAX_FIFO_DEPTH
+#define SPI_MCSPI_SLAVE_BUF_DEPTH	64
 #define SPI_MCSPI_SLAVE_BITS_PER_WORD	8
 #define SPI_MCSPI_SLAVE_CS_SENSITIVE	MCSPI_CS_SENSITIVE_ENABLED
 #define SPI_MCSPI_SLAVE_CS_POLARITY	MCSPI_CS_POLARITY_ACTIVE_LOW
 #define SPI_MCSPI_SLAVE_PIN_DIR		MCSPI_PIN_DIR_D0_IN_D1_OUT
+#define SPI_MCSPI_SLAVE_MODE		MCSPI_MODE_TRM
 
 #define MCSPI_SYSCONFIG			0x10
 #define MCSPI_SYSSTATUS			0x14
@@ -64,7 +71,11 @@
 #define MCSPI_MODULCTRL_PIN34		BIT(1)
 #define MCSPI_CHCTRL_EN			BIT(0)
 #define MCSPI_CHCONF_EPOL		BIT(6)
+
 #define MCSPI_CHCONF_TRM		(0x03 << 12)
+#define MCSPI_CHCONF_TM			BIT(13)
+#define MCSPI_CHCONF_RM			BIT(12)
+
 #define MCSPI_CHCONF_WL			(0x1F << 7)
 
 #define MCSPI_CHCONF_WL_8BIT_MASK	(0x07 << 7)
@@ -110,8 +121,10 @@ struct spi_slave {
 	void	__iomem			*base;
 	u32				start;
 	u32				end;
+	unsigned int			mode;
 	unsigned int			reg_offset;
 	u32				bits_per_word;
+	u32				buf_depth;
 	u32				fifo_depth;
 	u32				cs_sensitive;
 	u32				cs_polarity;
@@ -142,8 +155,8 @@ static inline int mcspi_slave_bytes_per_word(int word_len)
 		return 4;
 }
 
-static int mcspi_slave_wait_for_register_bit(void __iomem *base, u32 idx,
-					     u32 bit)
+static int mcspi_slave_wait_for_bit(void __iomem *base, u32 idx,
+				    u32 bit)
 {
 	unsigned long timeout;
 
@@ -198,18 +211,38 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
 
-	slave->tx = kzalloc(slave->fifo_depth, GFP_KERNEL);
-	if (slave->tx == NULL)
-		return -ENOMEM;
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
+		slave->tx = kzalloc(slave->buf_depth, GFP_KERNEL);
+		if (slave->tx == NULL)
+			return -ENOMEM;
+	}
 
-	slave->rx = kzalloc(slave->fifo_depth, GFP_KERNEL);
-	if (slave->rx == NULL)
-		return -ENOMEM;
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM) {
+		slave->rx = kzalloc(slave->buf_depth, GFP_KERNEL);
+		if (slave->rx == NULL)
+			return -ENOMEM;
+	}
+
+	/*tx = slave->tx;*/
+	/*load data for tests*/
+	/*for (i = 0;i < slave->buf_depth;i++)*/
+	/*	*tx++ = 0x1 + i;*/
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
-	l |= MCSPI_XFER_AFL;
-	l |= MCSPI_XFER_AEL;
+	l &= ~MCSPI_XFER_AEL;
+	l &= ~MCSPI_XFER_AFL;
+
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= (slave->fifo_depth - 1) << 8;
+
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		l |= (slave->fifo_depth - 1);
+
+	/*set maximum byte in rx0 register when mcspi generating interrupt*/
+	if (slave->mode == MCSPI_MODE_RM)
+	l = (slave->fifo_depth - 1) << 8;
+
 	l |= MCSPI_XFER_WCNT;
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
@@ -219,8 +252,12 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
 	/*enable fifo*/
-	l |= MCSPI_CHCONF_FFER;
-	l |= MCSPI_CHCONF_FFEW;
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_CHCONF_FFER;
+
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_CHCONF_FFEW;
+
 
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
@@ -242,7 +279,8 @@ static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 {
 	u32				l;
 	unsigned int			c;
-	u8				*rx;
+
+	mcspi_slave_disable(slave);
 
 	pr_info("%s: pio transfer\n", DRIVER_NAME);
 
@@ -254,24 +292,29 @@ static void mcspi_slave_pio_transfer(struct spi_slave *slave)
 
 	c = 8;
 
-	rx = slave->rx;
+	if (slave->mode == MCSPI_MODE_RM) {
+		if (slave->bits_per_word <= 8) {
+		u8		*rx;
+		const u8	*tx;
 
-	if (rx != NULL) {
-		{
-			c -= 1;
-			if (mcspi_slave_wait_for_register_bit(slave->base,
-							      MCSPI_CH0STAT,
-							      MCSPI_CHSTAT_RXS)
-							      < 0)
-				pr_info("%s: timeout\n", DRIVER_NAME);
+		rx = slave->rx;
+		tx = slave->tx;
+
+			do {
+				c -= 1;
+				if (mcspi_slave_wait_for_bit(slave->base,
+							     MCSPI_CH0STAT,
+							     MCSPI_CHSTAT_RXS)
+							     < 0)
+					pr_info("%s: timeout\n", DRIVER_NAME);
 
 				*rx++ = readl_relaxed(slave->base +  MCSPI_RX0);
 				pr_info("%s: read:%02x\n", DRIVER_NAME,
 					*(rx-1));
-		} while (c);
+
+			} while (c);
+		}
 	}
-
-
 }
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
@@ -329,27 +372,27 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
 	/*
 	 * clr bit(13 and 12) in chconf,
 	 * spi is set in transmit and receive mode
 	 */
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 	l &= ~MCSPI_CHCONF_TRM;
 
+	if (slave->mode == MCSPI_MODE_RM)
+		l |= MCSPI_CHCONF_RM;
+	else if (slave->mode == MCSPI_MODE_TM)
+		l |= MCSPI_CHCONF_TM;
+
 	/*
-	 * available is only 8 16 and 32 bits per word
+	 * available is only form 4 bits to 32 bits per word
 	 * before setting clear all WL bits
 	 */
 	l &= ~MCSPI_CHCONF_WL;
-
-	if (slave->bits_per_word == 32)
-		l |= MCSPI_CHCONF_WL_8BIT_MASK;
-	else if (slave->bits_per_word == 16)
-		l |= MCSPI_CHCONF_WL_16BIT_MASK;
-	else
-		l |= MCSPI_CHCONF_WL_8BIT_MASK;
+	l |= (slave->bits_per_word-1) << 7;
 
 	/*setting a line which is selected for reception */
 	if (slave->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
@@ -419,7 +462,7 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	pr_info("%s: MCSPI_SYSSTATUS:0x%x\n", DRIVER_NAME, l);
 
-	if (mcspi_slave_wait_for_register_bit(slave->base, MCSPI_SYSSTATUS,
+	if (mcspi_slave_wait_for_bit(slave->base, MCSPI_SYSSTATUS,
 					      MCSPI_SYSSTATUS_RESETDONE) == 0) {
 
 		pr_info("%s: controller ready for setting\n",
@@ -493,12 +536,14 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	struct spi_slave				*slave;
 
-	u32						fifo_depth;
+	u32						buf_depth;
 	u32						bits_per_word;
 	u32						cs_sensitive;
 	u32						cs_polarity;
 	unsigned int					pin_dir;
 	unsigned int					irq;
+	unsigned int					mode;
+	u32						fifo_depth;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -519,11 +564,20 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		 *default value num_cs and memory_depth
 		 *when this value is not define in dts
 		 */
-		fifo_depth = SPI_MCSPI_SLAVE_FIFO_DEPTH;
+		buf_depth = SPI_MCSPI_SLAVE_BUF_DEPTH;
 		bits_per_word = SPI_MCSPI_SLAVE_BITS_PER_WORD;
+		mode = SPI_MCSPI_SLAVE_MODE;
+		fifo_depth = SPI_MCSPI_SLAVE_FIFO_DEPTH;
 
 		of_property_read_u32(node, "fifo_depth", &fifo_depth);
+		of_property_read_u32(node, "buf_depth", &buf_depth);
 		of_property_read_u32(node, "bits_per_word", &bits_per_word);
+		/*
+		 * 0 - Transmit and receive mode
+		 * 1 - only-receive mode
+		 * 2 - only-transmit mode
+		 */
+		of_property_read_u32(node, "mode", &mode);
 
 		if (of_get_property(node, "cs_polarity", &cs_polarity))
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
@@ -578,7 +632,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	}
 
 	slave->dev			= dev;
-	slave->fifo_depth		= fifo_depth;
+	slave->buf_depth		= buf_depth;
 	slave->cs_polarity		= cs_polarity;
 	slave->start			= cp_res.start;
 	slave->end			= cp_res.end;
@@ -587,18 +641,22 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->cs_sensitive		= cs_sensitive;
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
+	slave->mode			= mode;
+	slave->fifo_depth		= fifo_depth;
 
 	platform_set_drvdata(pdev, slave);
 
 	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
 	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
 	pr_info("%s: regs_offset=%x\n", DRIVER_NAME, slave->reg_offset);
-	pr_info("%s: memory_depth=%d\n", DRIVER_NAME, slave->fifo_depth);
+	pr_info("%s: buf_depth=%d\n", DRIVER_NAME, slave->buf_depth);
 	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
+	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
+	pr_info("%s: fifo_depth:%d\n", DRIVER_NAME, slave->fifo_depth);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
