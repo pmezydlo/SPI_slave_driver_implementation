@@ -210,14 +210,8 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	void __iomem			*rx_reg;
 	void __iomem			*chstat;
 
-	pm_runtime_use_autosuspend(slave->dev);
-	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
-	pm_runtime_enable(slave->dev);
-
 	rx_reg = slave->base + MCSPI_RX0;
 	chstat = slave->base + MCSPI_CH0STAT;
-
-	pr_info("%s: pio rx transfer\n", DRIVER_NAME);
 
 	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
 	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
@@ -230,31 +224,25 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
 						     < 0)
-				pr_info("%s: timeout\n", DRIVER_NAME);
+				;
 
-			*rx++ = readl_relaxed(slave->base +  MCSPI_RX0);
-			pr_info("%s: read:%02x\n", DRIVER_NAME,	*(rx-1));
+			*rx++ = readl_relaxed(rx_reg);
+			pr_info("%s: write:%02x\n", DRIVER_NAME, *(rx-1));
 
 		} while (c);
 	}
-
-	pm_runtime_dont_use_autosuspend(slave->dev);
-	pm_runtime_put_sync(slave->dev);
-	pm_runtime_disable(slave->dev);
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
-
-static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
+static void mcspi_slave_pio_tx_transfer(unsigned long data)
 {
+	struct spi_slave		*slave = (struct spi_slave *) data;
 	unsigned int			c;
 	void __iomem			*tx_reg;
 	void __iomem			*chstat;
 
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
-
-	pr_info("%s: pio tx transfer\n", DRIVER_NAME);
 
 	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
 	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
@@ -267,7 +255,7 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
 						     < 0)
-				pr_info("%s: timeout\n", DRIVER_NAME);
+				;
 
 			pr_info("%s: write:%02x\n", DRIVER_NAME, *tx);
 			writel_relaxed(*tx++, tx_reg);
@@ -275,6 +263,7 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 		} while (c);
 	}
 }
+DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
@@ -285,14 +274,14 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 
 	if (l & MCSPI_IRQ_RX_FULL) {
 		l |= MCSPI_IRQ_RX_FULL;
-
 		pio_rx_tasklet.data = (unsigned long)slave;
 		tasklet_schedule(&pio_rx_tasklet);
 	}
 
 	if (l & MCSPI_IRQ_TX_EMPTY) {
 		l |= MCSPI_IRQ_TX_EMPTY;
-		mcspi_slave_pio_tx_transfer(slave);
+		pio_tx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_tx_tasklet);
 	}
 
 	/*clear IRQSTATUS register*/
