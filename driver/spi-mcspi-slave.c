@@ -534,6 +534,7 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	pr_info("%s: clean up", DRIVER_NAME);
 
 	tasklet_kill(&pio_rx_tasklet);
+	tasklet_kill(&pio_tx_tasklet);
 
 		if (slave->tx != NULL)
 			kfree(slave->tx);
