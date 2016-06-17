@@ -203,11 +203,16 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
 
-static void mcspi_slave_pio_rx_transfer(struct spi_slave *slave)
+static void mcspi_slave_pio_rx_transfer(unsigned long data)
 {
+	struct spi_slave		*slave = (struct spi_slave *) data;
 	unsigned int			c;
 	void __iomem			*rx_reg;
 	void __iomem			*chstat;
+
+	pm_runtime_use_autosuspend(slave->dev);
+	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
+	pm_runtime_enable(slave->dev);
 
 	rx_reg = slave->base + MCSPI_RX0;
 	chstat = slave->base + MCSPI_CH0STAT;
@@ -232,7 +237,13 @@ static void mcspi_slave_pio_rx_transfer(struct spi_slave *slave)
 
 		} while (c);
 	}
+
+	pm_runtime_dont_use_autosuspend(slave->dev);
+	pm_runtime_put_sync(slave->dev);
+	pm_runtime_disable(slave->dev);
 }
+DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
+
 
 static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 {
@@ -274,7 +285,9 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 
 	if (l & MCSPI_IRQ_RX_FULL) {
 		l |= MCSPI_IRQ_RX_FULL;
-		mcspi_slave_pio_rx_transfer(slave);
+
+		pio_rx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_rx_tasklet);
 	}
 
 	if (l & MCSPI_IRQ_TX_EMPTY) {
@@ -530,6 +543,8 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 static void mcspi_slave_clean_up(struct spi_slave *slave)
 {
 	pr_info("%s: clean up", DRIVER_NAME);
+
+	tasklet_kill(&pio_rx_tasklet);
 
 		if (slave->tx != NULL)
 			kfree(slave->tx);
