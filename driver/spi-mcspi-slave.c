@@ -86,6 +86,7 @@
 #define MCSPI_CHCONF_IS			BIT(18)
 #define MCSPI_CHCONF_DPE0		BIT(16)
 #define MCSPI_CHCONF_DPE1		BIT(17)
+#define MCSPI_CHCONF_PHA		BIT(0)
 
 #define MCSPI_IRQ_RX_OVERFLOW		BIT(3)
 #define MCSPI_IRQ_RX_FULL		BIT(2)
@@ -165,7 +166,7 @@ static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 	while (!(ioread32(reg) & bit)) {
 		if (time_after(jiffies, timeout)) {
 			if (!(ioread32(reg) & bit)) {
-				pr_info("%s: mcspi timeout!!!\n", DRIVER_NAME);
+				pr_err("%s: mcspi timeout!!!\n", DRIVER_NAME);
 				return -ETIMEDOUT;
 			} else
 				return 0;
@@ -216,7 +217,7 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
 	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
 
-	if (slave->bits_per_word <= 8) {
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	u8 *rx;
 
 	rx = slave->rx;
@@ -224,13 +225,33 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
 						     < 0)
-				;
+				goto out;
 
 			*rx++ = readl_relaxed(rx_reg);
-			pr_info("%s: write:%02x\n", DRIVER_NAME, *(rx-1));
+			pr_info("%s: read 8:0x%02x\n", DRIVER_NAME, *(rx-1));
 
 		} while (c);
 	}
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
+	u16 *rx;
+
+	rx = slave->rx;
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+			pr_info("%s: read 16:0x%04x\n", DRIVER_NAME, *(rx-1));
+
+		} while (c);
+	}
+
+	return;
+out:
+	pr_err("%s: timeout!!!", DRIVER_NAME);
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
@@ -247,7 +268,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
 	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
 
-	if (slave->bits_per_word <= 8) {
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	const u8 *tx;
 
 	tx = slave->tx;
@@ -255,13 +276,30 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
 						     < 0)
-				;
+				goto out;
 
-			pr_info("%s: write:%02x\n", DRIVER_NAME, *tx);
+			pr_info("%s: write 8:0x%02x\n", DRIVER_NAME, *tx);
 			writel_relaxed(*tx++, tx_reg);
-
 		} while (c);
 	}
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
+	const u16 *tx;
+
+	tx = slave->tx;
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			pr_info("%s: write 16:0x%04x\n", DRIVER_NAME, *tx);
+			writel_relaxed(*tx++, tx_reg);
+		} while (c);
+	}
+	return;
+out:
+	pr_err("%s: timeout!!!", DRIVER_NAME);
 }
 DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
 
@@ -299,8 +337,11 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
 
-	l |= MCSPI_IRQ_RX_FULL;
-	l |= MCSPI_IRQ_TX_EMPTY;
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_IRQ_RX_FULL;
+
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_IRQ_TX_EMPTY;
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
@@ -311,7 +352,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 				IRQF_TRIGGER_NONE,
 				DRIVER_NAME, slave);
 	if (ret) {
-		pr_info("%s: unable to request irq:%d\n", DRIVER_NAME,
+		pr_err("%s: unable to request irq:%d\n", DRIVER_NAME,
 			slave->irq);
 		ret = -EINTR;
 	}
@@ -351,6 +392,7 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	l &= ~MCSPI_XFER_AEL;
 	l &= ~MCSPI_XFER_AFL;
+
 	bytes_per_word = mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	/*
@@ -417,6 +459,8 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	 * spi is set in transmit and receive mode
 	 */
 	l &= ~MCSPI_CHCONF_TRM;
+
+	/*l |= MCSPI_CHCONF_PHA;*/
 
 	if (slave->mode == MCSPI_MODE_RM)
 		l |= MCSPI_CHCONF_RM;
@@ -522,7 +566,7 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 		mcspi_slave_enable(slave);
 	} else {
-		pr_info("%s: internal module reset is on-going\n",
+		pr_err("%s: internal module reset is on-going\n",
 			DRIVER_NAME);
 		ret = -EIO;
 	}
