@@ -249,6 +249,22 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 		} while (c);
 	}
 
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
+	u32 *rx;
+
+	rx = slave->rx;
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+			pr_info("%s: read 32:0x%04x\n", DRIVER_NAME, *(rx-1));
+
+		} while (c);
+	}
+
 	return;
 out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
@@ -297,6 +313,22 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
 	}
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
+	const u32 *tx;
+
+	tx = slave->tx;
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			pr_info("%s: write 32:0x%04x\n", DRIVER_NAME, *tx);
+			writel_relaxed(*tx++, tx_reg);
+		} while (c);
+	}
+
 	return;
 out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
