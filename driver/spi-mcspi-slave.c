@@ -26,14 +26,13 @@
 #define MCSPI_MODE_RM			1
 #define MCSPI_MODE_TM			2
 
-#define SPI_MCSPI_SLAVE_FIFO_DEPTH	MCSPI_MAX_FIFO_DEPTH
 #define SPI_MCSPI_SLAVE_BUF_DEPTH	64
 #define SPI_MCSPI_SLAVE_BITS_PER_WORD	8
 #define SPI_MCSPI_SLAVE_CS_SENSITIVE	MCSPI_CS_SENSITIVE_ENABLED
 #define SPI_MCSPI_SLAVE_CS_POLARITY	MCSPI_CS_POLARITY_ACTIVE_LOW
 #define SPI_MCSPI_SLAVE_PIN_DIR		MCSPI_PIN_DIR_D0_IN_D1_OUT
 #define SPI_MCSPI_SLAVE_MODE		MCSPI_MODE_TRM
-#define SPI_MCSPI_SLAVE_COPY_LENGTH	8
+#define SPI_MCSPI_SLAVE_COPY_LENGTH	4
 
 #define MCSPI_SYSCONFIG			0x10
 #define MCSPI_SYSSTATUS			0x14
@@ -128,7 +127,6 @@ struct spi_slave {
 	unsigned int			reg_offset;
 	u32				bits_per_word;
 	u32				buf_depth;
-	u32				fifo_depth;
 	u32				cs_sensitive;
 	u32				cs_polarity;
 	unsigned int			irq;
@@ -214,8 +212,8 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	rx_reg = slave->base + MCSPI_RX0;
 	chstat = slave->base + MCSPI_CH0STAT;
 
-	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
-	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	u8 *rx;
@@ -281,8 +279,8 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
 
-	c = mcspi_slave_bytes_per_word(slave->bits_per_word);
-	c *= SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	const u8 *tx;
@@ -432,10 +430,10 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	 * when mcspi generating interrupt
 	 */
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l  |= ((bytes_per_word * SPI_MCSPI_SLAVE_COPY_LENGTH) - 1) << 8;
+		l  |= (SPI_MCSPI_SLAVE_COPY_LENGTH - 1) << 8;
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l  |= ((bytes_per_word * SPI_MCSPI_SLAVE_COPY_LENGTH) - 1);
+		l  |= (SPI_MCSPI_SLAVE_COPY_LENGTH - 1);
 
 	/*disable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
@@ -658,7 +656,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pin_dir;
 	unsigned int					irq;
 	unsigned int					mode;
-	u32						fifo_depth;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -682,9 +679,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		buf_depth = SPI_MCSPI_SLAVE_BUF_DEPTH;
 		bits_per_word = SPI_MCSPI_SLAVE_BITS_PER_WORD;
 		mode = SPI_MCSPI_SLAVE_MODE;
-		fifo_depth = SPI_MCSPI_SLAVE_FIFO_DEPTH;
 
-		of_property_read_u32(node, "fifo_depth", &fifo_depth);
 		of_property_read_u32(node, "buf_depth", &buf_depth);
 		of_property_read_u32(node, "bits_per_word", &bits_per_word);
 		/*
@@ -757,7 +752,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
 	slave->mode			= mode;
-	slave->fifo_depth		= fifo_depth;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -771,7 +765,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
 	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
-	pr_info("%s: fifo_depth:%d\n", DRIVER_NAME, slave->fifo_depth);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);

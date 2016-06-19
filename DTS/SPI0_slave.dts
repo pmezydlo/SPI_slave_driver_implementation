@@ -38,7 +38,7 @@
 	     mode = <0>;
              fifo_depth = <8>;
              buf_depth = <32>;
-             bits_per_word = <8>;
+             bits_per_word = <16>;
         };
     };
 };
