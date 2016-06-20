@@ -32,7 +32,7 @@
 #define SPI_MCSPI_SLAVE_CS_POLARITY	MCSPI_CS_POLARITY_ACTIVE_LOW
 #define SPI_MCSPI_SLAVE_PIN_DIR		MCSPI_PIN_DIR_D0_IN_D1_OUT
 #define SPI_MCSPI_SLAVE_MODE		MCSPI_MODE_TRM
-#define SPI_MCSPI_SLAVE_COPY_LENGTH	4
+#define SPI_MCSPI_SLAVE_COPY_LENGTH	2
 
 #define MCSPI_SYSCONFIG			0x10
 #define MCSPI_SYSSTATUS			0x14
@@ -133,6 +133,8 @@ struct spi_slave {
 	unsigned int			pin_dir;
 	void  __iomem			*tx;
 	void  __iomem			*rx;
+	unsigned int			tx_offset;
+	unsigned int			rx_offset;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -215,10 +217,18 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
+	if (slave->rx_offset >= slave->buf_depth) {
+		pr_err("%s: end of rx buffer!!!", DRIVER_NAME);
+		slave->rx_offset = 0;
+		return;
+	}
+
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	u8 *rx;
 
-	rx = slave->rx;
+	rx = slave->rx + slave->rx_offset;
+	slave->rx_offset += (sizeof(u8) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
@@ -234,7 +244,9 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
 	u16 *rx;
 
-	rx = slave->rx;
+	rx = slave->rx + slave->rx_offset;
+	slave->rx_offset += (sizeof(u16) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
@@ -250,7 +262,9 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
 	u32 *rx;
 
-	rx = slave->rx;
+	rx = slave->rx + slave->rx_offset;
+	slave->rx_offset += (sizeof(u32) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
@@ -282,10 +296,18 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
+	if (slave->tx_offset >= slave->buf_depth) {
+		pr_err("%s: end of tx buffer!!!", DRIVER_NAME);
+		slave->tx_offset = 0;
+		return;
+	}
+
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
 	const u8 *tx;
 
-	tx = slave->tx;
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u8) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -300,7 +322,9 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
 	const u16 *tx;
 
-	tx = slave->tx;
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u16) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -315,7 +339,9 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
 	const u32 *tx;
 
-	tx = slave->tx;
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u32) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -752,6 +778,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
 	slave->mode			= mode;
+	slave->tx_offset		= 0;
+	slave->rx_offset		= 0;
 
 	platform_set_drvdata(pdev, slave);
 
