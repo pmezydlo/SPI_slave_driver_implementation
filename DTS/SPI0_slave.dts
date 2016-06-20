@@ -37,7 +37,7 @@
              pinctrl-0 = <&spi0_pins_s0>;
 	     mode = <0>;
              buf_depth = <64>;
-             bits_per_word = <8>;
+             bits_per_word = <32>;
         };
     };
 };

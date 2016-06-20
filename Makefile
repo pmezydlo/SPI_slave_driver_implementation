@@ -12,7 +12,7 @@ else
         export CROSS_COMPILE=$(COMPILER)
 endif
 
-obj-m+=driver/spi-mcspi-slave.o
+obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) modules
