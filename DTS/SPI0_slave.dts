@@ -32,12 +32,20 @@
     fragment@2 {
         target = <&spi0>;
         __overlay__ {
+             #address-cells = <1>;
+             #size-cells = <0>;
+
              status = "okay";
              pinctrl-names = "default";
              pinctrl-0 = <&spi0_pins_s0>;
 	     mode = <0>;
              buf_depth = <64>;
              bits_per_word = <32>;
+
+             spislave@0 {
+                 reg = <0>;
+                 compatible = "linux,spislave";
+             };
         };
     };
 };
