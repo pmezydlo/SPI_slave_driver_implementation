@@ -875,6 +875,6 @@ module_init(mcspi_slave_init);
 module_exit(mcspi_slave_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_AUTHOR("Patryk Mezydlo");
+MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");
 MODULE_DESCRIPTION("SPI slave for McSPI controller.");
 MODULE_VERSION("1.0");

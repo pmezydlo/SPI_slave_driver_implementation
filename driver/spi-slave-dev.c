@@ -3,21 +3,9 @@
 #include <linux/fs.h>
 #include <linux/of_device.h>
 #include <linux/device.h>
+#include <linux/spi/spi.h>
 
 #define DRIVER_NAME		"spislave"
-#define SPISLAVE_MAJOR		153
-
-
-struct spislave_dev {
-	int majorNumber;
-
-};
-
-static const struct file_operations spislave_fops = {
-	.owner = THIS_MODULE,
-};
-
-static struct class *spislave_class;
 
 static const struct of_device_id spislave_of_match[] = {
 	{
@@ -60,26 +48,12 @@ static int __init spislave_init(void)
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
-	ret  = register_chrdev(SPISLAVE_MAJOR, "spi", &spislave_fops);
+	ret = platform_driver_register(&spislave_driver);
 
 	if (ret < 0)
-		return ret;
-
-	pr_info("%s: register chrdev\n", DRIVER_NAME);
-
-	spislave_class = class_create(THIS_MODULE, "spislave");
-	if (IS_ERR(spislave_class)) {
-		unregister_chrdev(SPISLAVE_MAJOR, spislave_driver.driver.name);
-		return PTR_ERR(spislave_class);
-	}
-
-	pr_info("%s: class create\n", DRIVER_NAME);
-	pr_info("%s: driver register\n", DRIVER_NAME);
-
-	if (ret == 0)
-		pr_info("%s: platform driver register ok\n", DRIVER_NAME);
-	else
 		pr_info("%s: platform driver register error\n", DRIVER_NAME);
+	else
+		pr_info("%s: platform driver register ok\n", DRIVER_NAME);
 
 	return ret;
 }
