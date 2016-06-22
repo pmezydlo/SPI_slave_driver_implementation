@@ -846,33 +846,7 @@ static struct platform_driver mcspi_slave_driver = {
 		.of_match_table = of_match_ptr(mcspi_slave_of_match),
 	},
 };
-
-static int __init mcspi_slave_init(void)
-{
-	int ret;
-
-	pr_info("%s: init\n", DRIVER_NAME);
-	ret = platform_driver_register(&mcspi_slave_driver);
-
-	if (ret == 0)
-		pr_info("%s: platform driver register ok\n",
-			DRIVER_NAME);
-	else
-		pr_err("%s: platform driver register error\n",
-		       DRIVER_NAME);
-
-	return ret;
-}
-
-static void __exit mcspi_slave_exit(void)
-{
-	platform_driver_unregister(&mcspi_slave_driver);
-
-	pr_info("%s: exit\n", DRIVER_NAME);
-}
-
-module_init(mcspi_slave_init);
-module_exit(mcspi_slave_exit);
+module_platform_driver(mcspi_slave_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");

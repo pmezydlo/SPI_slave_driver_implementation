@@ -45,6 +45,7 @@
             spislave@1 {
                 reg = <0>;
                 compatible = "linux,spislave";
+                status = "okay";
             };
         };
     };
