@@ -9,6 +9,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -135,6 +136,7 @@ struct spi_slave {
 	void  __iomem			*rx;
 	unsigned int			tx_offset;
 	unsigned int			rx_offset;
+	s16				bus_num;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -645,6 +647,23 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	kfree(slave);
 }
 
+/*register managed SPI slave controller*/
+static int mcspi_slave_devm(struct spi_slave *slave)
+{
+	int			ret = 0;
+	struct spi_slave	**ptr;
+	struct device		*dev = slave->dev;
+	int			bus_num;
+
+	pr_info("%s: register SPI managed spi slave controller\n", DRIVER_NAME);
+
+	bus_num = of_alias_get_id(dev->of_node, "spi");
+	/*id is under zero this is weird*/
+	pr_info("%s: bus_num:%d\n", DRIVER_NAME, bus_num);
+
+	return ret;
+}
+
  /* default platform value located in .h file*/
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_REG_OFFSET,
@@ -794,9 +813,9 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
 	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
 
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
-	pm_runtime_enable(&pdev->dev);
+	pm_runtime_use_autosuspend(slave->dev);
+	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
+	pm_runtime_enable(slave->dev);
 
 	ret = pm_runtime_get_sync(slave->dev);
 	if (ret < 0)
@@ -806,12 +825,16 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
+	ret = mcspi_slave_devm(slave);
+	if (ret < 0)
+		goto disable_pm;
+
 	return ret;
 
 disable_pm:
-	pm_runtime_dont_use_autosuspend(&pdev->dev);
-	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_dont_use_autosuspend(slave->dev);
+	pm_runtime_put_sync(slave->dev);
+	pm_runtime_disable(slave->dev);
 
 free_slave:
 	if (slave != NULL) {

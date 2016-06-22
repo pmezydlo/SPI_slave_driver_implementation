@@ -13,6 +13,11 @@ static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
 static struct class *spislave_class;
 
+struct spislave {
+	struct device		*dev;
+	dev_t			devt;
+};
+
 static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
@@ -94,6 +99,7 @@ static int __init spislave_init(void)
 {
 	int			ret = 0;
 	unsigned long		minor;
+	struct device_node	*nc;
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
@@ -110,17 +116,27 @@ static int __init spislave_init(void)
 	}
 
 	/*------ in probe function ----------*/
-	minor = find_first_zero_bit(minors, N_SPI_MINORS);
-	if (minor < N_SPI_MINORS) {
-		struct device *dev;
+	{
+		struct spislave		*slave;
 
-		dev = device_create(spislave_class, NULL,
-				    MKDEV(SPISPLAVE_MAJOR, minor),
-				    NULL, DRIVER_NAME);
-		ret = PTR_ERR_OR_ZERO(dev);
-	} else {
-		pr_err("%s: no minor number available!!\n", DRIVER_NAME);
-		ret = -ENODEV;
+		slave = kzalloc(sizeof(struct spislave), GFP_KERNEL);
+		if (slave == NULL)
+			return -ENOMEM;
+
+		minor = find_first_zero_bit(minors, N_SPI_MINORS);
+		if (minor < N_SPI_MINORS) {
+			struct device *dev;
+
+			dev = device_create(spislave_class, NULL,
+					    MKDEV(SPISPLAVE_MAJOR, minor),
+					    NULL, DRIVER_NAME);
+			ret = PTR_ERR_OR_ZERO(dev);
+		} else {
+			pr_err("%s: no minor number available!!\n",
+			       DRIVER_NAME);
+
+			ret = -ENODEV;
+		}
 	}
 	/*--------------------------------------*/
 
@@ -129,6 +145,8 @@ static int __init spislave_init(void)
 
 static void __exit spislave_exit(void)
 {
+
+
 	pr_info("%s: exit\n", DRIVER_NAME);
 }
 
