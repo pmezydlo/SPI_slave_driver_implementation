@@ -654,12 +654,25 @@ static int mcspi_slave_devm(struct spi_slave *slave)
 	struct spi_slave	**ptr;
 	struct device		*dev = slave->dev;
 	int			bus_num;
+	struct platform_device	spi_contr;
+	struct device_node	*nc;
 
 	pr_info("%s: register SPI managed spi slave controller\n", DRIVER_NAME);
 
 	bus_num = of_alias_get_id(dev->of_node, "spi");
 	/*id is under zero this is weird*/
 	pr_info("%s: bus_num:%d\n", DRIVER_NAME, bus_num);
+
+	spi_contr = platform
+
+	for_each_available_child_of_node(dev->of_node, nc) {
+		if (of_node_test_and_set_flag(nc, OF_POPULATED))
+			continue;
+
+	pr_info("%s: child node is found", DRIVER_NAME);
+
+
+	}
 
 	return ret;
 }
