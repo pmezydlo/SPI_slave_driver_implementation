@@ -5,6 +5,8 @@
 #include <linux/device.h>
 #include <linux/spi/spi.h>
 
+#include "spi-slave-dev.h"
+
 #define DRIVER_NAME		"spislave"
 #define SPISPLAVE_MAJOR		154
 #define N_SPI_MINORS		32
@@ -114,7 +116,6 @@ static int __init spislave_init(void)
 		unregister_chrdev(SPISPLAVE_MAJOR, DRIVER_NAME);
 		return PTR_ERR(spislave_class);
 	}
-
 	/*------ in probe function ----------*/
 	{
 		struct spislave		*slave;

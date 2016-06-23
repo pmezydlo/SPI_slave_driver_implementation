@@ -15,6 +15,8 @@
 
 #include <linux/platform_data/spi-omap2-mcspi.h>
 
+#include "spi-slave-dev.h"
+
 #define MCSPI_PIN_DIR_D0_IN_D1_OUT	0
 #define MCSPI_PIN_DIR_D0_OUT_D1_IN	1
 #define MCSPI_CS_POLARITY_ACTIVE_HIGH	1
@@ -137,6 +139,7 @@ struct spi_slave {
 	unsigned int			tx_offset;
 	unsigned int			rx_offset;
 	s16				bus_num;
+	char				modalias[SPI_NAME_SIZE];
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -654,8 +657,9 @@ static int mcspi_slave_devm(struct spi_slave *slave)
 	struct spi_slave	**ptr;
 	struct device		*dev = slave->dev;
 	int			bus_num;
-	struct platform_device	spi_contr;
+	struct platform_device  *pdev;
 	struct device_node	*nc;
+	int			rc;
 
 	pr_info("%s: register SPI managed spi slave controller\n", DRIVER_NAME);
 
@@ -663,16 +667,33 @@ static int mcspi_slave_devm(struct spi_slave *slave)
 	/*id is under zero this is weird*/
 	pr_info("%s: bus_num:%d\n", DRIVER_NAME, bus_num);
 
-	spi_contr = platform
-
 	for_each_available_child_of_node(dev->of_node, nc) {
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
 			continue;
 
-	pr_info("%s: child node is found", DRIVER_NAME);
+		pr_info("%s: child node is found: %s\n", DRIVER_NAME,
+			nc->full_name);
 
-
+		rc = of_modalias_node(nc, slave->modalias,
+				      sizeof(slave->modalias));
+		if (rc < 0)
+			pr_err("%s: cannot find modalias\n", DRIVER_NAME);
+		else
+			pr_info("%s: find modalias %d\n", DRIVER_NAME, rc);
 	}
+
+	pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
+	pdev = of_platform_device_create(nc, NULL, dev);
+	pdev->dev.of_node = of_node_get(nc);
+	pdev->dev.platform_data = slave->modalias;
+
+	pr_info("%s: create platform device\n", DRIVER_NAME);
+
+	ret = device_add(&pdev->dev);
+	if (ret < 0)
+		pr_err("%s: can't add new device\n", DRIVER_NAME);
+
+	pr_info("%s: modalias: %s\n", DRIVER_NAME, slave->modalias);
 
 	return ret;
 }
@@ -681,7 +702,6 @@ static int mcspi_slave_devm(struct spi_slave *slave)
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_REG_OFFSET,
 };
-
 
 static const struct of_device_id mcspi_slave_of_match[] = {
 	{
