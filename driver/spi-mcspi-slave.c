@@ -650,51 +650,49 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	kfree(slave);
 }
 
+static int mcspi_slave_register_device(struct spi_slave *slave,
+				       struct device_node *nc)
+{
+	u32		value;
+	int		ret = 0;
+
+	ret = of_modalias_node(nc, slave->modalias, sizeof(slave->modalias));
+
+	if (ret < 0)
+		pr_err("%s: can't find modalias\n", DRIVER_NAME);
+
+	ret = of_property_read_u32(nc, "reg", &value);
+	if (ret)
+		pr_err("%s: has not valid \"reg\" in %s\n", DRIVER_NAME,
+		       nc->full_name);
+
+	return ret;
+}
+
 /*register managed SPI slave controller*/
 static int mcspi_slave_devm(struct spi_slave *slave)
 {
-	int			ret = 0;
-	struct spi_slave	**ptr;
 	struct device		*dev = slave->dev;
-	int			bus_num;
-	struct platform_device  *pdev;
+	struct device_node	*parent = dev->of_node;
+	int			ret = 0;
 	struct device_node	*nc;
-	int			rc;
 
 	pr_info("%s: register SPI managed spi slave controller\n", DRIVER_NAME);
 
-	bus_num = of_alias_get_id(dev->of_node, "spi");
-	/*id is under zero this is weird*/
-	pr_info("%s: bus_num:%d\n", DRIVER_NAME, bus_num);
-
-	for_each_available_child_of_node(dev->of_node, nc) {
+	for_each_available_child_of_node(parent, nc) {
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
 			continue;
 
 		pr_info("%s: child node is found: %s\n", DRIVER_NAME,
 			nc->full_name);
 
-		rc = of_modalias_node(nc, slave->modalias,
-				      sizeof(slave->modalias));
-		if (rc < 0)
-			pr_err("%s: cannot find modalias\n", DRIVER_NAME);
-		else
-			pr_info("%s: find modalias %d\n", DRIVER_NAME, rc);
+		//here install managed device
+		ret = mcspi_slave_register_device(slave, nc);
+
+		if (ret < 0)
+		pr_err("%s: can't add new device %s\n", DRIVER_NAME,
+		       nc->full_name);
 	}
-
-	pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
-	pdev = of_platform_device_create(nc, NULL, dev);
-	pdev->dev.of_node = of_node_get(nc);
-	pdev->dev.platform_data = slave->modalias;
-
-	pr_info("%s: create platform device\n", DRIVER_NAME);
-
-	ret = device_add(&pdev->dev);
-	if (ret < 0)
-		pr_err("%s: can't add new device\n", DRIVER_NAME);
-
-	pr_info("%s: modalias: %s\n", DRIVER_NAME, slave->modalias);
-
 	return ret;
 }
 
@@ -738,7 +736,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
 	dev  = &pdev->dev;
-	node = pdev->dev.of_node;
+	node = dev->of_node;
 
 	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
 
@@ -857,6 +855,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	ret = mcspi_slave_setup(slave);
 	if (ret < 0)
 		goto disable_pm;
+
+
 
 	ret = mcspi_slave_devm(slave);
 	if (ret < 0)
