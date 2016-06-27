@@ -5,6 +5,7 @@
 
 
 struct spislave_data {
+
 	void __iomem	*tx_buf;
 	void __iomem	*rx_buf;
 	unsigned int	tx_offset;

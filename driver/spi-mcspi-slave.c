@@ -10,6 +10,8 @@
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
+#include <linux/fs.h>
+#include <linux/ioctl.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -121,6 +123,12 @@
 #define MCSPI_CHSTAT_TXFFF		BIT(4)
 #define MCSPI_CHSTAT_TXFFE		BIT(3)
 
+#define SPISLAVE_MAJOR			154
+#define N_SPI_MINORS			32
+
+static DECLARE_BITMAP(minors, N_SPI_MINORS);
+static struct class *spislave_class;
+
 struct spi_slave {
 	struct	device			*dev;
 	void	__iomem			*base;
@@ -140,6 +148,7 @@ struct spi_slave {
 	unsigned int			rx_offset;
 	s16				bus_num;
 	char				modalias[SPI_NAME_SIZE];
+	dev_t				devt;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -650,52 +659,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	kfree(slave);
 }
 
-static int mcspi_slave_register_device(struct spi_slave *slave,
-				       struct device_node *nc)
-{
-	u32		value;
-	int		ret = 0;
-
-	ret = of_modalias_node(nc, slave->modalias, sizeof(slave->modalias));
-
-	if (ret < 0)
-		pr_err("%s: can't find modalias\n", DRIVER_NAME);
-
-	ret = of_property_read_u32(nc, "reg", &value);
-	if (ret)
-		pr_err("%s: has not valid \"reg\" in %s\n", DRIVER_NAME,
-		       nc->full_name);
-
-	return ret;
-}
-
-/*register managed SPI slave controller*/
-static int mcspi_slave_devm(struct spi_slave *slave)
-{
-	struct device		*dev = slave->dev;
-	struct device_node	*parent = dev->of_node;
-	int			ret = 0;
-	struct device_node	*nc;
-
-	pr_info("%s: register SPI managed spi slave controller\n", DRIVER_NAME);
-
-	for_each_available_child_of_node(parent, nc) {
-		if (of_node_test_and_set_flag(nc, OF_POPULATED))
-			continue;
-
-		pr_info("%s: child node is found: %s\n", DRIVER_NAME,
-			nc->full_name);
-
-		//here install managed device
-		ret = mcspi_slave_register_device(slave, nc);
-
-		if (ret < 0)
-		pr_err("%s: can't add new device %s\n", DRIVER_NAME,
-		       nc->full_name);
-	}
-	return ret;
-}
-
  /* default platform value located in .h file*/
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_REG_OFFSET,
@@ -732,6 +695,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pin_dir;
 	unsigned int					irq;
 	unsigned int					mode;
+
+	unsigned long					minor;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -856,13 +821,28 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
-
-
-	ret = mcspi_slave_devm(slave);
-	if (ret < 0)
-		goto disable_pm;
-
 	return ret;
+
+	minor = find_first_zero_bit(minors, N_SPI_MINORS);
+	if (minor < N_SPI_MINORS) {
+		struct device *devc;
+
+		slave->devt = MKDEV(SPISLAVE_MAJOR, minor);
+
+		devc = device_create(spislave_class, &slave->dev,
+				     slave->devt,
+				     slave, DRIVER_NAME);
+
+
+		ret = PTR_ERR_OR_ZERO(devc);
+	} else {
+		pr_err("%s: no minor number available!!\n",
+		       DRIVER_NAME);
+
+		ret = -ENODEV;
+	}
+
+	pr_info("%s: register device\n", DRIVER_NAME);
 
 disable_pm:
 	pm_runtime_dont_use_autosuspend(slave->dev);
@@ -884,6 +864,9 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
+	device_destroy(spislave_class, slave->devt);
+	clear_bit(MINOR(slave->devt), minors);
+
 	mcspi_slave_clean_up(slave);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
@@ -902,7 +885,87 @@ static struct platform_driver mcspi_slave_driver = {
 		.of_match_table = of_match_ptr(mcspi_slave_of_match),
 	},
 };
-module_platform_driver(mcspi_slave_driver);
+
+static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
+			     loff_t *f_pos)
+{
+	ssize_t		ret = 0;
+
+	pr_info("%s read\n", DRIVER_NAME);
+	return ret;
+}
+
+static ssize_t spislave_write(struct file *file, const char __user *buf,
+			      size_t count, loff_t *f_pos)
+{
+	ssize_t		ret = 0;
+
+	pr_info("%s write\n", DRIVER_NAME);
+	return ret;
+}
+
+static int spislave_release(struct inode *inode, struct file *filp)
+{
+	int	ret = 0;
+
+	pr_info("%s release\n", DRIVER_NAME);
+	return ret;
+}
+
+static int spislave_open(struct inode *inode, struct file *filp)
+{
+	int	ret = 0;
+
+	pr_info("%s open\n", DRIVER_NAME);
+	return ret;
+}
+
+static const struct file_operations spislave_fops = {
+	.owner		= THIS_MODULE,
+	.open		= spislave_open,
+	.read		= spislave_read,
+	.write		= spislave_write,
+	.release	= spislave_release,
+};
+
+static int __init mcspi_slave_init(void)
+{
+	int		ret = 0;
+	unsigned long	minor;
+
+	pr_info("%s: init\n", DRIVER_NAME);
+
+	BUILD_BUG_ON(N_SPI_MINORS > 256);
+
+	ret = register_chrdev(SPISLAVE_MAJOR, "spi", &spislave_fops);
+	if (ret < 0)
+		return ret;
+
+	spislave_class = class_create(THIS_MODULE, DRIVER_NAME);
+	if (IS_ERR(spislave_class)) {
+		unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
+		return PTR_ERR(spislave_class);
+	}
+
+	ret = platform_driver_register(&mcspi_slave_driver);
+	if (ret < 0)
+		pr_err("%s: platform driver error\n", DRIVER_NAME);
+
+	return ret;
+}
+
+static void __exit mcspi_slave_exit(void)
+{
+	class_unregister(spislave_class);
+	class_destroy(spislave_class);
+	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
+	platform_driver_unregister(&mcspi_slave_driver);
+
+	pr_info("%s: exit\n", DRIVER_NAME);
+}
+
+module_init(mcspi_slave_init);
+module_exit(mcspi_slave_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");

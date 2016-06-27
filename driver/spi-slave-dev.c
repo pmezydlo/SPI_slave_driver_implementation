@@ -8,12 +8,13 @@
 #include "spi-slave-dev.h"
 
 #define DRIVER_NAME		"spislave"
-#define SPISPLAVE_MAJOR		154
+#define SPISLAVE_MAJOR		154
 #define N_SPI_MINORS		32
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
 
-static struct class *spislave_class;
+static struct class	*spislave_class;
+dev_t			devt;
 
 struct spislave {
 	struct device		*dev;
@@ -101,51 +102,47 @@ static int __init spislave_init(void)
 {
 	int			ret = 0;
 	unsigned long		minor;
-	struct device_node	*nc;
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
 	BUILD_BUG_ON(N_SPI_MINORS > 256);
 
-	ret = register_chrdev(SPISPLAVE_MAJOR, "spi", &spislave_fops);
+	ret = register_chrdev(SPISLAVE_MAJOR, "spi", &spislave_fops);
 	if (ret < 0)
 		return ret;
 
 	spislave_class = class_create(THIS_MODULE, DRIVER_NAME);
 	if (IS_ERR(spislave_class)) {
-		unregister_chrdev(SPISPLAVE_MAJOR, DRIVER_NAME);
+		unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
 		return PTR_ERR(spislave_class);
 	}
-	/*------ in probe function ----------*/
-	{
-		struct spislave		*slave;
 
-		slave = kzalloc(sizeof(struct spislave), GFP_KERNEL);
-		if (slave == NULL)
-			return -ENOMEM;
+	minor = find_first_zero_bit(minors, N_SPI_MINORS);
 
-		minor = find_first_zero_bit(minors, N_SPI_MINORS);
-		if (minor < N_SPI_MINORS) {
-			struct device *dev;
+	if (minor < N_SPI_MINORS) {
+		struct device *dev;
 
-			dev = device_create(spislave_class, NULL,
-					    MKDEV(SPISPLAVE_MAJOR, minor),
-					    NULL, DRIVER_NAME);
-			ret = PTR_ERR_OR_ZERO(dev);
-		} else {
-			pr_err("%s: no minor number available!!\n",
-			       DRIVER_NAME);
+		devt = MKDEV(SPISLAVE_MAJOR, minor);
+		dev = device_create(spislave_class, NULL,
+				    devt,
+				    NULL, DRIVER_NAME);
 
-			ret = -ENODEV;
-		}
+		ret = PTR_ERR_OR_ZERO(dev);
+	} else {
+		pr_err("%s: no minor number available!!\n",
+		       DRIVER_NAME);
+		ret = -ENODEV;
 	}
-	/*--------------------------------------*/
 
 	return ret;
 }
 
 static void __exit spislave_exit(void)
 {
+	device_destroy(spislave_class, devt);
+	class_unregister(spislave_class);
+	class_destroy(spislave_class);
+	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
 
 
 	pr_info("%s: exit\n", DRIVER_NAME);
