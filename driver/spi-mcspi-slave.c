@@ -123,13 +123,12 @@
 #define MCSPI_CHSTAT_TXFFF		BIT(4)
 #define MCSPI_CHSTAT_TXFFE		BIT(3)
 
-#define SPISLAVE_MAJOR		154
-#define N_SPI_MINORS		32
+#define SPISLAVE_MAJOR			154
+#define N_SPI_MINORS			32
 
 static DECLARE_BITMAP(minors, N_SPI_MINORS);
-
+static LIST_HEAD(device_list);
 static struct class	*spislave_class;
-dev_t			devt;
 
 struct spi_slave {
 	struct	device			*dev;
@@ -150,6 +149,8 @@ struct spi_slave {
 	unsigned int			rx_offset;
 	s16				bus_num;
 	char				modalias[SPI_NAME_SIZE];
+	dev_t				devt;
+	struct	list_head		device_entry;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -826,6 +827,28 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
+	minor = find_first_zero_bit(minors, N_SPI_MINORS);
+
+	if (minor < N_SPI_MINORS) {
+		struct device *dev;
+
+		slave->devt = MKDEV(SPISLAVE_MAJOR, minor);
+		dev = device_create(spislave_class, NULL,
+				    slave->devt, NULL, "spislave%d",
+				    slave->bus_num);
+
+		ret = PTR_ERR_OR_ZERO(dev);
+	} else {
+		pr_err("%s: no minor number available!!\n",
+		       DRIVER_NAME);
+		ret = -ENODEV;
+	}
+
+	if (ret == 0) {
+		set_bit(minor, minors);
+		list_add(&slave->device_entry, &device_list);
+	}
+
 	return ret;
 
 	pr_info("%s: register device\n", DRIVER_NAME);
@@ -851,6 +874,9 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	slave = platform_get_drvdata(pdev);
 
 	mcspi_slave_clean_up(slave);
+
+	list_del(&slave->device_entry);
+	device_destroy(spislave_class, slave->devt);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
@@ -914,7 +940,6 @@ static const struct file_operations spislave_fops = {
 static int __init mcspi_slave_init(void)
 {
 	int		ret = 0;
-	unsigned long	minor;
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
@@ -930,23 +955,6 @@ static int __init mcspi_slave_init(void)
 		return PTR_ERR(spislave_class);
 	}
 
-	minor = find_first_zero_bit(minors, N_SPI_MINORS);
-
-	if (minor < N_SPI_MINORS) {
-		struct device *dev;
-
-		devt = MKDEV(SPISLAVE_MAJOR, minor);
-		dev = device_create(spislave_class, NULL,
-				    devt,
-				    NULL, DRIVER_NAME);
-
-		ret = PTR_ERR_OR_ZERO(dev);
-	} else {
-		pr_err("%s: no minor number available!!\n",
-		       DRIVER_NAME);
-		ret = -ENODEV;
-	}
-
 	ret = platform_driver_register(&mcspi_slave_driver);
 	if (ret < 0)
 		pr_err("%s: platform driver error\n", DRIVER_NAME);
@@ -956,7 +964,6 @@ static int __init mcspi_slave_init(void)
 
 static void __exit mcspi_slave_exit(void)
 {
-	device_destroy(spislave_class, devt);
 	platform_driver_unregister(&mcspi_slave_driver);
 	class_unregister(spislave_class);
 	class_destroy(spislave_class);
