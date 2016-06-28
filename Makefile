@@ -17,6 +17,7 @@ obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) modules
 	gcc -o test_master_app/spidev_test test_master_app/spidev_test.c
+	gcc -o slave_app/slave_app slave_app/slave_app.c
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean

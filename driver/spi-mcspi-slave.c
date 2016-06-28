@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/fs.h>
 #include <linux/ioctl.h>
+#include <asm/uaccess.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -833,8 +834,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		struct device *dev;
 
 		slave->devt = MKDEV(SPISLAVE_MAJOR, minor);
-		dev = device_create(spislave_class, NULL,
-				    slave->devt, NULL, "spislave%d",
+		dev = device_create(spislave_class, slave->dev,
+				    slave->devt, slave, "spislave%d",
 				    slave->bus_num);
 
 		ret = PTR_ERR_OR_ZERO(dev);
@@ -898,18 +899,38 @@ static struct platform_driver mcspi_slave_driver = {
 static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
-	ssize_t		ret = 0;
+	struct spi_slave	*slave;
+	int			error_count = 0;
 
-	pr_info("%s read\n", DRIVER_NAME);
-	return ret;
+	slave = flip->private_data;
+	pr_info("%s: read begin\n", DRIVER_NAME);
+
+	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
+
+	pr_info("%s: read end count:%d\n", DRIVER_NAME, error_count);
+
+	if (error_count == 0)
+		return 0;
+	else
+		return -EFAULT;
 }
 
-static ssize_t spislave_write(struct file *file, const char __user *buf,
+static ssize_t spislave_write(struct file *flip, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
-	ssize_t		ret = 0;
+	ssize_t			ret = 0;
+	struct spi_slave	*slave;
+	unsigned long		missing;
 
-	pr_info("%s write\n", DRIVER_NAME);
+	slave = flip->private_data;
+	missing = copy_from_user(slave->tx, buf, count);
+
+	if (missing == 0)
+		ret = count;
+	else
+		ret = -EFAULT;
+
+	pr_info("%s: write\n", DRIVER_NAME);
 	return ret;
 }
 
@@ -917,7 +938,7 @@ static int spislave_release(struct inode *inode, struct file *filp)
 {
 	int	ret = 0;
 
-	pr_info("%s release\n", DRIVER_NAME);
+	pr_info("%s: release\n", DRIVER_NAME);
 	return ret;
 }
 
@@ -925,7 +946,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 {
 	int	ret = 0;
 
-	pr_info("%s open\n", DRIVER_NAME);
+	pr_info("%s: open\n", DRIVER_NAME);
 	return ret;
 }
 
