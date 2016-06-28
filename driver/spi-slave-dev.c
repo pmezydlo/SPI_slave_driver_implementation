@@ -65,7 +65,7 @@ static const struct file_operations spislave_fops = {
 
 static const struct of_device_id spislave_of_match[] = {
 	{
-		.compatible = "linux,spislave",
+		.compatible = "ti,omap4-mcspi",
 	},
 	{ }
 };
@@ -134,16 +134,20 @@ static int __init spislave_init(void)
 		ret = -ENODEV;
 	}
 
+	ret = platform_driver_register(&spislave_driver);
+	if (ret < 0)
+		pr_err("%s: platform driver error\n", DRIVER_NAME);
+
 	return ret;
 }
 
 static void __exit spislave_exit(void)
 {
 	device_destroy(spislave_class, devt);
+	platform_driver_unregister(&spislave_driver);
 	class_unregister(spislave_class);
 	class_destroy(spislave_class);
 	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
-
 
 	pr_info("%s: exit\n", DRIVER_NAME);
 }
