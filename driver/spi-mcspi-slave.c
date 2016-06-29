@@ -131,6 +131,9 @@ static DECLARE_BITMAP(minors, N_SPI_MINORS);
 static LIST_HEAD(device_list);
 static struct class	*spislave_class;
 
+static char massage[256] = {0};
+static int size;
+
 struct spi_slave {
 	struct	device			*dev;
 	void	__iomem			*base;
@@ -901,11 +904,13 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 {
 	struct spi_slave	*slave;
 	int			error_count = 0;
+	u8			*tx;
 
 	slave = flip->private_data;
-	pr_info("%s: read begin\n", DRIVER_NAME);
+	pr_info("%s: read begin%d\n", DRIVER_NAME, slave->bus_num);
 
-	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
+	error_count = copy_to_user(buf, massage, size);
+
 
 	pr_info("%s: read end count:%d\n", DRIVER_NAME, error_count);
 
@@ -923,7 +928,8 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	unsigned long		missing;
 
 	slave = flip->private_data;
-	missing = copy_from_user(slave->tx, buf, count);
+	missing = copy_from_user(massage, buf, count);
+	size = count;
 
 	if (missing == 0)
 		ret = count;
