@@ -23,30 +23,28 @@ static int transfer_8bit(int fd)
 		return -1;
 	}
 
-	for (i = 9; i < TX_ARRAY_SIZE; i++)
+	printf("Transmit:\n");
+
+	for (i = 0; i < TX_ARRAY_SIZE; i++) {
 		printf("0x%0.2X ", tx[i]);
+
+		if (i%8 == 7)
+			printf("\n");
+	}
 
 	return ret;
 }
 
-
-int main()
+static int read_8bit(int fd)
 {
-	int ret, fd, i;
-
-	fd = open("/dev/spislave1", O_RDWR);
-
-	if (fd < 0) {
-		printf("Failed to open the device!\n");
-		return -1;
-	}
-
-	uint8_t rx[RX_ARRAY_SIZE];
+	uint8_t		rx[RX_ARRAY_SIZE];
+	int		ret;
+	int		i;
 
 	printf("Receive:\n");
 
 	ret = read(fd, rx, RX_ARRAY_SIZE);
-	if (ret < 0){
+	if (ret < 0) {
 		printf("failed to read the message!\n");
 		return -1;
 	}
@@ -57,13 +55,35 @@ int main()
 		if (i%8 == 7)
 			printf("\n");
 	}
+	return ret;
+}
 
-	ret = transfer_8bit(fd);
+int main(int argc, char *argv[])
+{
+	int	ret = 0
+	int	fd;
+	int	i;
 
-	if (ret < 0) {
-		printf("Failed to transfer!\n");
+	fd = open(argv[1], O_RDWR);
+
+	if (fd < 0) {
+		printf("Failed to open the device!\n");
 		return -1;
 	}
 
-	return 0;
+	printf("Open:%s\n", argv[1]);
+
+	ret = read_8bit(fd);
+	if (ret < 0) {
+		printf("Failed to reads!\n");
+		return -1;
+	}
+
+	ret = transfer_8bit(fd);
+	if (ret < 0) {
+		printf("Failed to writes massage!\n");
+		return -1;
+	}
+
+	return ret;
 }
