@@ -127,12 +127,9 @@
 #define SPISLAVE_MAJOR			154
 #define N_SPI_MINORS			32
 
-static DECLARE_BITMAP(minors, N_SPI_MINORS);
-static LIST_HEAD(device_list);
-static struct class	*spislave_class;
-
-static char massage[256] = {0};
-static int size;
+static					DECLARE_BITMAP(minors, N_SPI_MINORS);
+static					LIST_HEAD(device_list);
+static struct class			*spislave_class;
 
 struct spi_slave {
 	struct	device			*dev;
@@ -155,6 +152,7 @@ struct spi_slave {
 	char				modalias[SPI_NAME_SIZE];
 	dev_t				devt;
 	struct	list_head		device_entry;
+	unsigned int			users;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -904,13 +902,16 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 {
 	struct spi_slave	*slave;
 	int			error_count = 0;
-	u8			*tx;
 
 	slave = flip->private_data;
-	pr_info("%s: read begin%d\n", DRIVER_NAME, slave->bus_num);
+	pr_info("%s: read begin\n", DRIVER_NAME);
 
-	error_count = copy_to_user(buf, massage, size);
+	if (slave->rx == NULL) {
+		pr_err("%s: slave->rx pointer is NULL\n", DRIVER_NAME);
+		return -ENOMEM;
+	}
 
+	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
 
 	pr_info("%s: read end count:%d\n", DRIVER_NAME, error_count);
 
@@ -928,8 +929,14 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	unsigned long		missing;
 
 	slave = flip->private_data;
-	missing = copy_from_user(massage, buf, count);
-	size = count;
+
+	if (slave->tx == NULL) {
+		pr_err("%s: slave->tx pointer is NULL\n", DRIVER_NAME);
+		return -ENOMEM;
+	}
+
+	missing = copy_from_user(slave->tx, buf, count);
+	slave->tx_offset = count;
 
 	if (missing == 0)
 		ret = count;
@@ -942,7 +949,13 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	int	ret = 0;
+	int			ret = 0;
+	struct spi_slave	*slave;
+
+	slave = filp->private_data;
+	filp->private_data = NULL;
+
+	slave->users--;
 
 	pr_info("%s: release\n", DRIVER_NAME);
 	return ret;
@@ -950,7 +963,20 @@ static int spislave_release(struct inode *inode, struct file *filp)
 
 static int spislave_open(struct inode *inode, struct file *filp)
 {
-	int	ret = 0;
+	int			ret = -ENXIO;
+	struct spi_slave	*slave;
+
+	list_for_each_entry(slave, &device_list, device_entry) {
+		if (slave->devt == inode->i_rdev) {
+			ret = 0;
+			pr_info("%s: for each ret = 0\n", DRIVER_NAME);
+			break;
+		}
+	}
+
+	slave->users++;
+	filp->private_data = slave;
+	nonseekable_open(inode, filp);
 
 	pr_info("%s: open\n", DRIVER_NAME);
 	return ret;
