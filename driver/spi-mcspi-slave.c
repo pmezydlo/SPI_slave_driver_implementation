@@ -377,6 +377,76 @@ out:
 }
 DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
 
+static void mcspi_slave_pio_tx_load(struct spi_slave *slave,
+				    unsigned int load_length)
+{
+	unsigned int			c;
+	void __iomem			*tx_reg;
+	void __iomem			*chstat;
+
+	tx_reg = slave->base + MCSPI_TX0;
+	chstat = slave->base + MCSPI_CH0STAT;
+
+	c = load_length;
+	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
+	const u8 *tx;
+
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u8) * c);
+
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			pr_info("%s: write 8:0x%02x\n", DRIVER_NAME, *tx);
+			writel_relaxed(*tx++, tx_reg);
+		} while (c);
+	}
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
+	const u16 *tx;
+
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u16) * c);
+
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			pr_info("%s: write 16:0x%04x\n", DRIVER_NAME, *tx);
+			writel_relaxed(*tx++, tx_reg);
+		} while (c);
+	}
+
+	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
+	const u32 *tx;
+
+	tx = slave->tx + slave->tx_offset;
+	slave->tx_offset += (sizeof(u32) * c);
+
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			pr_info("%s: write 32:0x%04x\n", DRIVER_NAME, *tx);
+			writel_relaxed(*tx++, tx_reg);
+		} while (c);
+	}
+
+	return;
+out:
+	pr_err("%s: timeout!!!", DRIVER_NAME);
+}
+
+
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
 	struct spi_slave	*slave = dev_id;
@@ -389,12 +459,13 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 		pio_rx_tasklet.data = (unsigned long)slave;
 		tasklet_schedule(&pio_rx_tasklet);
 	}
-
-	if (l & MCSPI_IRQ_TX_EMPTY) {
-		l |= MCSPI_IRQ_TX_EMPTY;
-		pio_tx_tasklet.data = (unsigned long)slave;
-		tasklet_schedule(&pio_tx_tasklet);
-	}
+	/*
+	 *if (l & MCSPI_IRQ_TX_EMPTY) {
+	 *	l |= MCSPI_IRQ_TX_EMPTY;
+	 *	pio_tx_tasklet.data = (unsigned long)slave;
+	 *	tasklet_schedule(&pio_tx_tasklet);
+	 *}
+	 */
 
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
@@ -414,8 +485,10 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
 		l |= MCSPI_IRQ_RX_FULL;
 
-	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_IRQ_TX_EMPTY;
+	/*
+	 * if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+	 *	l |= MCSPI_IRQ_TX_EMPTY;
+	 */
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
@@ -916,6 +989,10 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
 		error_count, slave->rx_offset);
 
+	/*after read clear receive buffer*/
+	slave->rx_offset = 0;
+	memset(slave->rx, 0, slave->buf_depth);
+
 	if (error_count == 0)
 		return 0;
 	else
@@ -936,14 +1013,22 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 		return -ENOMEM;
 	}
 
+	memset(slave->tx, 0, slave->buf_depth);
+
+	if (count > MCSPI_MAX_FIFO_DEPTH/2) {
+		pr_err("%s: message is too long!!!\n", DRIVER_NAME);
+		return -EFAULT;
+	}
+
 	missing = copy_from_user(slave->tx, buf, count);
-	slave->tx_offset = 0;
-	memset(&slave->tx, 0, slave->buf_depth);
 
 	if (missing == 0)
 		ret = count;
 	else
-		ret = -EFAULT;
+		return -EFAULT;
+
+	slave->tx_offset = 0;
+	mcspi_slave_pio_tx_load(slave, count);
 
 	pr_info("%s: write\n", DRIVER_NAME);
 	return ret;

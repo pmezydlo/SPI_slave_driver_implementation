@@ -51,28 +51,29 @@ static int transfer(int fd, uint8_t *bits, uint32_t *speed, uint16_t *delay)
 
 int main(int argc, char *argv[])
 {
-	int ret = 0;
-	int fd;
-	int transfer_ret = 0;
-	uint8_t bits = 8;
-	uint32_t speed = 500000;
-	uint16_t delay;
+	int		ret = 0;
+	int		fd;
+	int		transfer_ret = 0;
+	uint8_t		bits = 8;
+	uint32_t	speed = 500000;
+	uint16_t	delay;
 
         if (argc != 2) {
-                printf("Wrong number of arguments! \n");
+                printf("Wrong number of arguments!\n");
                 ret = -1;
         }
         else {
 	        fd = open(argv[1], O_RDWR);
 
 	        if (fd < 0) {
-		        printf("Can't open: %s! \n",argv[1]);
+		        printf("Can't open: %s!\n",argv[1]);
                         ret = -1;
                 }
                 else {
 			transfer_ret = transfer(fd,&bits,&speed,&delay);
 			if (transfer_ret > 0)
-                                printf("Transfer completed, %d bytes received \n", transfer_ret);
+                                printf("Transfer completed, %d bytes received\n",
+				       transfer_ret);
 
                         close(fd);
                 }
