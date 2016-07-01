@@ -913,7 +913,8 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 
 	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
 
-	pr_info("%s: read end count:%d\n", DRIVER_NAME, error_count);
+	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
+		error_count, slave->rx_offset);
 
 	if (error_count == 0)
 		return 0;
@@ -936,7 +937,8 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	}
 
 	missing = copy_from_user(slave->tx, buf, count);
-	slave->tx_offset = count;
+	slave->tx_offset = 0;
+	memset(&slave->tx, 0, slave->buf_depth);
 
 	if (missing == 0)
 		ret = count;

@@ -9,7 +9,7 @@
 
 #define ARRAT_SIZE 8
 #define BUFFER_LENGTH 256
-static char receive[BUFFER_LENGTH];
+static uint8_t receive[BUFFER_LENGTH];
 
 static int load_8bit__tx(int fd)
 {
@@ -20,7 +20,7 @@ static int load_8bit__tx(int fd)
 }
 
 int main(){
-	int ret, fd;
+	int ret, fd, i;
 	char stringToSend[BUFFER_LENGTH];
 
 	fd = open("/dev/spislave1", O_RDWR);
@@ -36,7 +36,11 @@ int main(){
 		return -1;
 	}
 
-	printf("The received message is: [%s]\n", receive);
+	for (i = 0; i < BUFFER_LENGTH; i++) {
+		printf("%.2X ", receive[i]);
+	}
+
+        printf("\n");
 
 	return 0;
 }
