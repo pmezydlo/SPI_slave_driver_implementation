@@ -459,13 +459,13 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 		pio_rx_tasklet.data = (unsigned long)slave;
 		tasklet_schedule(&pio_rx_tasklet);
 	}
-	/*
-	 *if (l & MCSPI_IRQ_TX_EMPTY) {
-	 *	l |= MCSPI_IRQ_TX_EMPTY;
-	 *	pio_tx_tasklet.data = (unsigned long)slave;
-	 *	tasklet_schedule(&pio_tx_tasklet);
-	 *}
-	 */
+	/**/
+	 if (l & MCSPI_IRQ_TX_EMPTY) {
+		l |= MCSPI_IRQ_TX_EMPTY;
+		pio_tx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_tx_tasklet);
+	 }
+	/* */
 
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
@@ -485,10 +485,10 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
 		l |= MCSPI_IRQ_RX_FULL;
 
-	/*
-	 * if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-	 *	l |= MCSPI_IRQ_TX_EMPTY;
-	 */
+	/**/
+	 if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_IRQ_TX_EMPTY;
+	 /**/
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
