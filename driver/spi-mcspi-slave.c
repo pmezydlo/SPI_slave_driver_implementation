@@ -91,6 +91,7 @@
 #define MCSPI_CHCONF_IS			BIT(18)
 #define MCSPI_CHCONF_DPE0		BIT(16)
 #define MCSPI_CHCONF_DPE1		BIT(17)
+#define MCSPI_CHCONF_POL		BIT(1)
 #define MCSPI_CHCONF_PHA		BIT(0)
 
 #define MCSPI_IRQ_RX_OVERFLOW		BIT(3)
@@ -377,6 +378,66 @@ out:
 }
 DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
 
+static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
+{
+	struct spi_slave	*slave = dev_id;
+	u32			l;
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
+
+	if (l & MCSPI_IRQ_RX_FULL) {
+		l |= MCSPI_IRQ_RX_FULL;
+		pio_rx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_rx_tasklet);
+	}
+
+	if (l & MCSPI_IRQ_TX_EMPTY) {
+		l |= MCSPI_IRQ_TX_EMPTY;
+		pio_tx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_tx_tasklet);
+	 }
+
+
+	/*clear IRQSTATUS register*/
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
+
+	return (irq_handler_t) IRQ_HANDLED;
+}
+
+static int mcspi_slave_set_irq(struct spi_slave *slave)
+{
+	u32		l;
+	int		ret = 0;
+
+	pr_info("%s: set interrupt\n", DRIVER_NAME);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
+
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_IRQ_RX_FULL;
+
+
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_IRQ_TX_EMPTY;
+
+
+	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
+
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
+
+	ret = devm_request_irq(slave->dev, slave->irq,
+				(irq_handler_t)mcspi_slave_irq,
+				IRQF_TRIGGER_NONE,
+				DRIVER_NAME, slave);
+	if (ret) {
+		pr_err("%s: unable to request irq:%d\n", DRIVER_NAME,
+			slave->irq);
+		ret = -EINTR;
+	}
+
+	return ret;
+}
+
 static void mcspi_slave_pio_tx_load(struct spi_slave *slave,
 				    unsigned int load_length)
 {
@@ -444,67 +505,6 @@ static void mcspi_slave_pio_tx_load(struct spi_slave *slave,
 	return;
 out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
-}
-
-
-static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
-{
-	struct spi_slave	*slave = dev_id;
-	u32			l;
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
-
-	if (l & MCSPI_IRQ_RX_FULL) {
-		l |= MCSPI_IRQ_RX_FULL;
-		pio_rx_tasklet.data = (unsigned long)slave;
-		tasklet_schedule(&pio_rx_tasklet);
-	}
-	/**/
-	 if (l & MCSPI_IRQ_TX_EMPTY) {
-		l |= MCSPI_IRQ_TX_EMPTY;
-		pio_tx_tasklet.data = (unsigned long)slave;
-		tasklet_schedule(&pio_tx_tasklet);
-	 }
-	/* */
-
-	/*clear IRQSTATUS register*/
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
-
-	return (irq_handler_t) IRQ_HANDLED;
-}
-
-static int mcspi_slave_set_irq(struct spi_slave *slave)
-{
-	u32		l;
-	int		ret = 0;
-
-	pr_info("%s: set interrupt\n", DRIVER_NAME);
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
-
-	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_IRQ_RX_FULL;
-
-	/**/
-	 if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_IRQ_TX_EMPTY;
-	 /**/
-
-	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
-
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
-
-	ret = devm_request_irq(slave->dev, slave->irq,
-				(irq_handler_t)mcspi_slave_irq,
-				IRQF_TRIGGER_NONE,
-				DRIVER_NAME, slave);
-	if (ret) {
-		pr_err("%s: unable to request irq:%d\n", DRIVER_NAME,
-			slave->irq);
-		ret = -EINTR;
-	}
-
-	return ret;
 }
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
@@ -608,6 +608,7 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	l &= ~MCSPI_CHCONF_TRM;
 
 	/*l |= MCSPI_CHCONF_PHA;*/
+	/*l |= MCSPI_CHCONF_POL;*/
 
 	if (slave->mode == MCSPI_MODE_RM)
 		l |= MCSPI_CHCONF_RM;
@@ -1027,8 +1028,8 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	else
 		return -EFAULT;
 
+	/*mcspi_slave_pio_tx_load(slave, count);*/
 	slave->tx_offset = 0;
-	mcspi_slave_pio_tx_load(slave, count);
 
 	pr_info("%s: write\n", DRIVER_NAME);
 	return ret;
