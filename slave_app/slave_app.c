@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
+#include "../driver/spi-slave-dev.h"
 
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
@@ -19,9 +20,10 @@ static int transfer_8bit(int fd)
 {
 	int		ret = 0;
 	uint8_t		tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};
-	/*uint8_t	tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};
-	 *uint8_t	tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
-	 */
+/*
+ *	uint8_t	tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};
+ *	uint8_t	tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
+ */
 	int		i;
 
 	ret = write(fd, tx, TX_ARRAY_SIZE);
@@ -118,6 +120,9 @@ int main(int argc, char *argv[])
 	int	ret = 0;
 	int	fd;
 	int	i;
+	int	tx_offset;
+	int	rx_offset;
+	int	bits_per_word;
 
 	read_flag = write_flag = 0;
 
@@ -130,6 +135,21 @@ int main(int argc, char *argv[])
 	}
 
 	printf("Open:%s\n", device);
+
+	ret = ioctl(fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
+	if (ret == -1)
+		printf("Can't read bits per word\n");
+
+	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
+	if (ret == -1)
+		printf("Cant't read rx_offset\n");
+
+	ret = ioctl(fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
+	if (ret == -1)
+		printf("Cant't read tx_offset\n");
+
+	printf("TX offset:%d, RX offset:%d, Bits per word:%d",
+	       tx_offset, rx_offset, bits_per_word);
 
 	if (read_flag) {
 		ret = read_8bit(fd);

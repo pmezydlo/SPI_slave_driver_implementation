@@ -41,6 +41,7 @@
 	    mode = <0>;
             buf_depth = <64>;
             bits_per_word = <8>;
+	    pindir-D0-out-D1-in = <0>;            
 
             spislave@0 {
                 reg = <0>;

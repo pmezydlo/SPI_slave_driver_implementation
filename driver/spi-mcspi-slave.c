@@ -147,8 +147,8 @@ struct spi_slave {
 	unsigned int			pin_dir;
 	void  __iomem			*tx;
 	void  __iomem			*rx;
-	unsigned int			tx_offset;
-	unsigned int			rx_offset;
+	u32				tx_offset;
+	u32				rx_offset;
 	s16				bus_num;
 	char				modalias[SPI_NAME_SIZE];
 	dev_t				devt;
@@ -515,6 +515,15 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	u8				*tx;
 	unsigned int			i;
 
+	static u8			tx_array[] = {0xDE, 0xAD, 0xBE, 0xEF,
+						      0x12, 0x21, 0x82, 0x13,
+						      0xAA, 0xAA, 0xAA, 0xAA,
+						      0xAA, 0xAA, 0xAA, 0xAA,
+						      0x70, 0x12, 0xAA, 0x55,
+						      0x21, 0x12, 0xFF, 0x00,
+						      0xEF, 0x19, 0x92, 0xA2,
+						      0x12, 0xDE, 0xFE, 0x12};
+
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
@@ -523,9 +532,10 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 			return -ENOMEM;
 
 		tx = slave->tx;
+
 		/*load data for tests*/
 		for (i = 0; i < 32; i++)
-			*tx++ = (u8)(0x1 + i);
+			*tx++ = tx_array[i];
 
 	}
 
@@ -607,8 +617,8 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	 */
 	l &= ~MCSPI_CHCONF_TRM;
 
-	/*l |= MCSPI_CHCONF_PHA;*/
-	/*l |= MCSPI_CHCONF_POL;*/
+	l &= ~MCSPI_CHCONF_PHA;
+	l &= ~MCSPI_CHCONF_POL;
 
 	if (slave->mode == MCSPI_MODE_RM)
 		l |= MCSPI_CHCONF_RM;
@@ -1070,12 +1080,58 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	return ret;
 }
 
+static long spislave_ioctl(struct file *filp, unsigned int cmd,
+			   unsigned long arg)
+{
+	int			ret = 0;
+	int			err = 0;
+	struct spi_slave	*slave;
+
+	pr_info("%s: ioctl\n", DRIVER_NAME);
+
+	if (_IOC_TYPE(cmd) != SPISLAVE_IOC_MAGIC)
+		return -ENOTTY;
+
+	if (_IOC_DIR(cmd) & _IOC_READ)
+		err = !access_ok(VERIFY_WRITE,
+				 (void __user *)arg, _IOC_SIZE(cmd));
+
+	if (err == 0 && _IOC_DIR(cmd) & _IOC_WRITE)
+		err = !access_ok(VERIFY_WRITE,
+				 (void __user *)arg, _IOC_SIZE(cmd));
+
+	if (err)
+		return -EFAULT;
+
+	slave = filp->private_data;
+
+	switch (cmd) {
+	case SPISLAVE_RD_TX_OFFSET:
+		ret = __put_user(slave->tx_offset, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_RX_OFFSET:
+		ret = __put_user(slave->rx_offset, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_BITS_PER_WORD:
+		ret = __put_user(slave->bits_per_word, (__u32 __user *)arg);
+		break;
+
+	default:
+
+		break;
+	}
+	return ret;
+}
+
 static const struct file_operations spislave_fops = {
 	.owner		= THIS_MODULE,
 	.open		= spislave_open,
 	.read		= spislave_read,
 	.write		= spislave_write,
 	.release	= spislave_release,
+	.unlocked_ioctl = spislave_ioctl,
 };
 
 static int __init mcspi_slave_init(void)
