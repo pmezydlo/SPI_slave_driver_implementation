@@ -5,8 +5,9 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <linux/types.h>
+#include <sys/types.h>
 #include "../driver/spi-slave-dev.h"
+#include <sys/poll.h>
 
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
@@ -117,34 +118,35 @@ static void parse_opts(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	int	ret = 0;
-	int	fd;
-	int	i;
-	int	tx_offset;
-	int	rx_offset;
-	int	bits_per_word;
+	int			ret = 0;
+	int			i;
+	int			tx_offset;
+	int			rx_offset;
+	int			bits_per_word;
+	int			timeout = 10000; /*timeout in msec*/
+	struct pollfd		pollfds;
 
 	read_flag = write_flag = 0;
 
 	parse_opts(argc, argv);
-	fd = open(device, O_RDWR);
+	pollfds.fd = open(device, O_RDWR);
 
-	if (fd < 0) {
+	if (pollfds.fd < 0) {
 		printf("Failed to open the device!\n");
 		return -1;
 	}
 
 	printf("Open:%s\n", device);
 
-	ret = ioctl(fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
 	if (ret == -1)
 		printf("Can't read bits per word\n");
 
-	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
 	if (ret == -1)
 		printf("Cant't read rx_offset\n");
 
-	ret = ioctl(fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
 	if (ret == -1)
 		printf("Cant't read tx_offset\n");
 
@@ -152,17 +154,37 @@ int main(int argc, char *argv[])
 	       tx_offset, rx_offset, bits_per_word);
 
 	if (read_flag) {
-		ret = read_8bit(fd);
 
-		if (ret < 0) {
-			printf("Failed to reads!\n");
-			return -1;
+		while (1) {
+			ret = poll(&pollfds, 1, timeout);
+
+			switch (ret) {
+			case 0:
+				printf("timeout\n");
+				break;
+
+			case -1:
+				printf("poll error\n");
+				exit(1);
+
+			default:
+				if (pollfds.revents & POLLIN) {
+					ret = read_8bit(pollfds.fd);
+
+					if (ret < 0) {
+						printf("Failed to reads!\n");
+						return -1;
+					}
+					exit(0);
+				}
+				break;
+			}
 		}
 	}
 
 
 	if (write_flag) {
-		ret = transfer_8bit(fd);
+		ret = transfer_8bit(pollfds.fd);
 
 		if (ret < 0) {
 			printf("Failed to writes massage!\n");

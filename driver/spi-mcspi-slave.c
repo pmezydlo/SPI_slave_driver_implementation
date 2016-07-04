@@ -13,6 +13,9 @@
 #include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <asm/uaccess.h>
+#include <linux/wait.h>
+#include <linux/poll.h>
+#include <linux/sched.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -125,6 +128,9 @@
 #define MCSPI_CHSTAT_TXFFF		BIT(4)
 #define MCSPI_CHSTAT_TXFFE		BIT(3)
 
+#define SPI_SLAVE_SET_FLAG		1
+#define SPI_SLAVE_CLR_FLAG		0
+
 #define SPISLAVE_MAJOR			154
 #define N_SPI_MINORS			32
 
@@ -154,6 +160,9 @@ struct spi_slave {
 	dev_t				devt;
 	struct	list_head		device_entry;
 	unsigned int			users;
+	wait_queue_head_t		wait;
+	unsigned int			tx_flag;
+	unsigned int			rx_flag;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -295,7 +304,7 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 
 		} while (c);
 	}
-
+	slave->rx_flag = SPI_SLAVE_SET_FLAG;
 	return;
 out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
@@ -723,6 +732,9 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 			return ret;
 
 		mcspi_slave_enable(slave);
+
+		wake_up_poll(&slave->wait, POLLIN);
+
 	} else {
 		pr_err("%s: internal module reset is on-going\n",
 			DRIVER_NAME);
@@ -935,6 +947,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		list_add(&slave->device_entry, &device_list);
 	}
 
+	init_waitqueue_head(&slave->wait);
+
 	return ret;
 
 	pr_info("%s: register device\n", DRIVER_NAME);
@@ -1009,6 +1023,7 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 	else
 		return -EFAULT;
 }
+
 
 static ssize_t spislave_write(struct file *flip, const char __user *buf,
 			      size_t count, loff_t *f_pos)
@@ -1125,6 +1140,32 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	return ret;
 }
 
+static unsigned int spislave_event_poll(struct file *filp,
+					struct poll_table_struct *wait)
+{
+	struct spi_slave *slave;
+	unsigned int events = 0;
+
+	slave = filp->private_data;
+
+	if (slave == NULL) {
+		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
+		return -EFAULT;
+	}
+
+
+	pr_info("%s: POLL method!!\n", DRIVER_NAME);
+	poll_wait(filp, &slave->wait, wait);
+	pr_info("%s: poll end of wait!!\n", DRIVER_NAME);
+	if (slave->rx_offset != 0)
+		events = POLLIN | POLLRDNORM;
+
+	pr_info("%s: POLL method end!!\n", DRIVER_NAME);
+
+	return events;
+}
+
+
 static const struct file_operations spislave_fops = {
 	.owner		= THIS_MODULE,
 	.open		= spislave_open,
@@ -1132,6 +1173,7 @@ static const struct file_operations spislave_fops = {
 	.write		= spislave_write,
 	.release	= spislave_release,
 	.unlocked_ioctl = spislave_ioctl,
+	.poll		= spislave_event_poll,
 };
 
 static int __init mcspi_slave_init(void)
