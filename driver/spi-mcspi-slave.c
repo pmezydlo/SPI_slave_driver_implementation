@@ -155,6 +155,7 @@ struct spi_slave {
 	void  __iomem			*rx;
 	u32				tx_offset;
 	u32				rx_offset;
+	u32				bytes_per_load;
 	s16				bus_num;
 	char				modalias[SPI_NAME_SIZE];
 	dev_t				devt;
@@ -163,6 +164,7 @@ struct spi_slave {
 	wait_queue_head_t		wait;
 	unsigned int			tx_flag;
 	unsigned int			rx_flag;
+	u32				length_of_transfer;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -351,8 +353,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	const u16 *tx;
 
 	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u16) * c);
-
+	slave->tx_offset += (sizeof(u8) * c);
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -368,7 +369,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	const u32 *tx;
 
 	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u32) * c);
+	slave->tx_offset += (sizeof(u8) * c);
 
 		do {
 			c -= 1;
@@ -445,75 +446,6 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	}
 
 	return ret;
-}
-
-static void mcspi_slave_pio_tx_load(struct spi_slave *slave,
-				    unsigned int load_length)
-{
-	unsigned int			c;
-	void __iomem			*tx_reg;
-	void __iomem			*chstat;
-
-	tx_reg = slave->base + MCSPI_TX0;
-	chstat = slave->base + MCSPI_CH0STAT;
-
-	c = load_length;
-	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
-
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
-	const u8 *tx;
-
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u8) * c);
-
-		do {
-			c -= 1;
-			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
-						     < 0)
-				goto out;
-
-			pr_info("%s: write 8:0x%02x\n", DRIVER_NAME, *tx);
-			writel_relaxed(*tx++, tx_reg);
-		} while (c);
-	}
-
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
-	const u16 *tx;
-
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u16) * c);
-
-		do {
-			c -= 1;
-			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
-						     < 0)
-				goto out;
-
-			pr_info("%s: write 16:0x%04x\n", DRIVER_NAME, *tx);
-			writel_relaxed(*tx++, tx_reg);
-		} while (c);
-	}
-
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
-	const u32 *tx;
-
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u32) * c);
-
-		do {
-			c -= 1;
-			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
-						     < 0)
-				goto out;
-
-			pr_info("%s: write 32:0x%04x\n", DRIVER_NAME, *tx);
-			writel_relaxed(*tx++, tx_reg);
-		} while (c);
-	}
-
-	return;
-out:
-	pr_err("%s: timeout!!!", DRIVER_NAME);
 }
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
@@ -603,6 +535,14 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
+static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
+{
+	int		ret = 0;
+
+
+	return ret;
+}
+
 static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 {
 	u32		l;
@@ -620,14 +560,14 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
+	l &= ~MCSPI_CHCONF_PHA;
+	l &= ~MCSPI_CHCONF_POL;
+
 	/*
 	 * clr bit(13 and 12) in chconf,
 	 * spi is set in transmit and receive mode
 	 */
 	l &= ~MCSPI_CHCONF_TRM;
-
-	l &= ~MCSPI_CHCONF_PHA;
-	l &= ~MCSPI_CHCONF_POL;
 
 	if (slave->mode == MCSPI_MODE_RM)
 		l |= MCSPI_CHCONF_RM;
@@ -720,20 +660,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_setup_system(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
-
 		ret = mcspi_slave_set_irq(slave);
 
 		if (ret < 0)
 			return ret;
-
-		ret = mcspi_slave_setup_pio_transfer(slave);
-
-		if (ret < 0)
-			return ret;
-
-		mcspi_slave_enable(slave);
-
-		wake_up_poll(&slave->wait, POLLIN);
 
 	} else {
 		pr_err("%s: internal module reset is on-going\n",
@@ -788,14 +718,11 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	struct spi_slave				*slave;
 
-	u32						buf_depth;
-	u32						bits_per_word;
 	u32						cs_sensitive;
 	u32						cs_polarity;
 	unsigned int					pin_dir;
 	unsigned int					irq;
-	unsigned int					mode;
-	static int					bus_num = 1;
+	static int					bus_num;
 
 	unsigned long					minor;
 
@@ -813,23 +740,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	if (match) {/* user setting from dts*/
 		pdata = match->data;
-
-		/*
-		 *default value num_cs and memory_depth
-		 *when this value is not define in dts
-		 */
-		buf_depth = SPI_MCSPI_SLAVE_BUF_DEPTH;
-		bits_per_word = SPI_MCSPI_SLAVE_BITS_PER_WORD;
-		mode = SPI_MCSPI_SLAVE_MODE;
-
-		of_property_read_u32(node, "buf_depth", &buf_depth);
-		of_property_read_u32(node, "bits_per_word", &bits_per_word);
-		/*
-		 * 0 - Transmit and receive mode
-		 * 1 - only-receive mode
-		 * 2 - only-transmit mode
-		 */
-		of_property_read_u32(node, "mode", &mode);
 
 		if (of_get_property(node, "cs_polarity", &cs_polarity))
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
@@ -886,18 +796,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	}
 
 	slave->dev			= dev;
-	slave->buf_depth		= buf_depth;
 	slave->cs_polarity		= cs_polarity;
 	slave->start			= cp_res.start;
 	slave->end			= cp_res.end;
 	slave->reg_offset		= regs_offset;
-	slave->bits_per_word		= bits_per_word;
 	slave->cs_sensitive		= cs_sensitive;
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
-	slave->mode			= mode;
-	slave->tx_offset		= 0;
-	slave->rx_offset		= 0;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -905,13 +810,10 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
 	pr_info("%s: bus_num:%d\n", DRIVER_NAME, slave->bus_num);
 	pr_info("%s: regs_offset=%x\n", DRIVER_NAME, slave->reg_offset);
-	pr_info("%s: buf_depth=%d\n", DRIVER_NAME, slave->buf_depth);
-	pr_info("%s: bits_per_word=%d\n", DRIVER_NAME, slave->bits_per_word);
 	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
-	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
 
 	pm_runtime_use_autosuspend(slave->dev);
 	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
@@ -948,6 +850,11 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	}
 
 	init_waitqueue_head(&slave->wait);
+
+	if (wait_event_interruptible(slave->wait, 1))
+		return ret;
+
+
 
 	return ret;
 
@@ -1102,8 +1009,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	int			err = 0;
 	struct spi_slave	*slave;
 
-	pr_info("%s: ioctl\n", DRIVER_NAME);
-
 	if (_IOC_TYPE(cmd) != SPISLAVE_IOC_MAGIC)
 		return -ENOTTY;
 
@@ -1131,6 +1036,59 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 
 	case SPISLAVE_RD_BITS_PER_WORD:
 		ret = __put_user(slave->bits_per_word, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_BYTES_PER_LOAD:
+		ret = __put_user(slave->bytes_per_load, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_MODE:
+		ret = __put_user(slave->mode, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_BUF_DEPTH:
+		ret = __put_user(slave->buf_depth, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_ENABLED:
+		pr_info("%s: IOCTL mcspi set enabled", DRIVER_NAME);
+		mcspi_slave_enable(slave);
+		break;
+
+	case SPISLAVE_DISABLED:
+		pr_info("%s: IOCTL mcspi set disaabled", DRIVER_NAME);
+		mcspi_slave_disable(slave);
+		break;
+
+	case SPISLAVE_SET_TRANSFER:
+		pr_info("%s: IOCTL mcspi set transfer", DRIVER_NAME);
+		mcspi_slave_setup_pio_transfer(slave);
+		break;
+
+	case SPISLAVE_CLR_TRANSFER:
+		pr_info("%s: IOCTL mcspi clt transfer", DRIVER_NAME);
+		mcspi_slave_clr_pio_transfer(slave);
+		break;
+
+	case SPISLAVE_WR_BITS_PER_WORD:
+		ret = __get_user(slave->bits_per_word, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_WR_MODE:
+		ret = __get_user(slave->mode, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_WR_BUF_DEPTH:
+		ret = __get_user(slave->buf_depth, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_WR_BYTES_PER_LOAD:
+		ret = __get_user(slave->bytes_per_load, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_WR_LENGTH_OF_TRANSFER:
+		ret = __get_user(slave->length_of_transfer,
+				 (__u32 __user *)arg);
 		break;
 
 	default:
@@ -1164,7 +1122,6 @@ static unsigned int spislave_event_poll(struct file *filp,
 
 	return events;
 }
-
 
 static const struct file_operations spislave_fops = {
 	.owner		= THIS_MODULE,

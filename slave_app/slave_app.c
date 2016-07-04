@@ -12,7 +12,7 @@
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
 
-static const char	*device = "/dev/spislave1";
+static const char	*device = "/dev/spislave0";
 static uint8_t		bits_per_word = 8;
 static uint8_t		read_flag;
 static uint8_t		write_flag;
@@ -120,11 +120,16 @@ int main(int argc, char *argv[])
 {
 	int			ret = 0;
 	int			i;
-	int			tx_offset;
-	int			rx_offset;
-	int			bits_per_word;
 	int			timeout = 10000; /*timeout in msec*/
 	struct pollfd		pollfds;
+
+	uint32_t		tx_offset;
+	uint32_t		rx_offset;
+	uint32_t		bits_per_word = 32;
+	uint32_t		mode;
+	uint32_t		buf_depth;
+	uint32_t		bytes_per_load;
+	uint32_t		length_of_transfer;
 
 	read_flag = write_flag = 0;
 
@@ -138,6 +143,12 @@ int main(int argc, char *argv[])
 
 	printf("Open:%s\n", device);
 
+	ret = ioctl(pollfds.fd, SPISLAVE_WR_BITS_PER_WORD, &bits_per_word);
+	if (ret == -1)
+		printf("Can't write bits per word\n");
+
+	bits_per_word = 0;
+
 	ret = ioctl(pollfds.fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
 	if (ret == -1)
 		printf("Can't read bits per word\n");
@@ -150,8 +161,45 @@ int main(int argc, char *argv[])
 	if (ret == -1)
 		printf("Cant't read tx_offset\n");
 
-	printf("TX offset:%d, RX offset:%d, Bits per word:%d",
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_BUF_DEPTH, &buf_depth);
+	if (ret == -1)
+		printf("Can't read buf_depth\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_MODE, &mode);
+	if (ret == -1)
+		printf("Cant't read mode\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_BYTES_PER_LOAD, &bytes_per_load);
+	if (ret == -1)
+		printf("Cant't read bytes_per_load\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_RD_LENGTH_OF_TRANSFER,
+		    &length_of_transfer);
+	if (ret == -1)
+		printf("Cant't read length_of_transfer\n");
+
+	printf("TX offset:%d, RX offset:%d, Bits per word:%d\n",
 	       tx_offset, rx_offset, bits_per_word);
+	printf("BUF depth:%d, Mode:%d, Bytes per load:%d\n",
+	       buf_depth, mode, bytes_per_load);
+	printf("Length of transfer:%d\n", length_of_transfer);
+
+
+	ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
+	if (ret == -1)
+		printf("Cant't call clr transfer\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
+	if (ret == -1)
+		printf("Cant't call set transfer\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
+	if (ret == -1)
+		printf("Can't call mcspi enabled\n");
+
+	ret = ioctl(pollfds.fd, SPISLAVE_DISABLED);
+	if (ret == -1)
+		printf("Can't call mcspi disabled\n");
 
 	if (read_flag) {
 
@@ -181,7 +229,6 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-
 
 	if (write_flag) {
 		ret = transfer_8bit(pollfds.fd);
