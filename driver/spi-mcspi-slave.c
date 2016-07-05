@@ -101,7 +101,7 @@
 #define MCSPI_IRQ_RX_FULL		BIT(2)
 #define MCSPI_IRQ_TX_UNDERFLOW		BIT(1)
 #define MCSPI_IRQ_TX_EMPTY		BIT(0)
-#define MCSPI_IRQ_EOWKE			BIT(17)
+#define MCSPI_IRQ_EOW			BIT(17)
 
 #define MCSPI_SYSCONFIG_CLOCKACTIVITY	(0x03 << 8)
 #define MCSPI_SYSCONFIG_SIDLEMODE	(0x03 << 3)
@@ -244,7 +244,7 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	rx_reg = slave->base + MCSPI_RX0;
 	chstat = slave->base + MCSPI_CH0STAT;
 
-	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c = slave->bytes_per_load;
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (slave->rx_offset >= slave->buf_depth) {
@@ -323,7 +323,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
 
-	c = SPI_MCSPI_SLAVE_COPY_LENGTH;
+	c = slave->bytes_per_load;
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (slave->tx_offset >= slave->buf_depth) {
@@ -388,6 +388,16 @@ out:
 }
 DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
 
+static void mcspi_slave_end_of_word_tasklet(unsigned long data)
+{
+	struct spi_slave		*slave = (struct spi_slave *) data;
+
+	pr_info("%s: end of transaction!!", DRIVER_NAME);
+
+
+}
+DECLARE_TASKLET(end_of_word_tasklet, mcspi_slave_end_of_word_tasklet, 0);
+
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
 	struct spi_slave	*slave = dev_id;
@@ -405,8 +415,13 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 		l |= MCSPI_IRQ_TX_EMPTY;
 		pio_tx_tasklet.data = (unsigned long)slave;
 		tasklet_schedule(&pio_tx_tasklet);
-	 }
+	}
 
+	if (l & MCSPI_IRQ_EOW) {
+		l |= MCSPI_IRQ_EOW;
+		end_of_word_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&end_of_word_tasklet);
+	}
 
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
@@ -430,6 +445,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
 		l |= MCSPI_IRQ_TX_EMPTY;
 
+	l |= MCSPI_IRQ_EOW;
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
@@ -452,7 +468,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
 	u32				l;
 	int				ret = 0;
-	unsigned int			bytes_per_word;
 	u8				*tx;
 	unsigned int			i;
 
@@ -477,7 +492,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 		/*load data for tests*/
 		for (i = 0; i < 32; i++)
 			*tx++ = tx_array[i];
-
 	}
 
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM) {
@@ -491,26 +505,43 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l &= ~MCSPI_XFER_AEL;
 	l &= ~MCSPI_XFER_AFL;
 
-	bytes_per_word = mcspi_slave_bytes_per_word(slave->bits_per_word);
-
 	/*
 	 * set maximum receive and transmit byte
 	 * when mcspi generating interrupt
 	 */
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l  |= (SPI_MCSPI_SLAVE_COPY_LENGTH - 1) << 8;
+		l  |= (slave->bytes_per_load - 1) << 8;
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l  |= (SPI_MCSPI_SLAVE_COPY_LENGTH - 1);
+		l  |= (slave->bytes_per_load - 1);
 
-	/*disable word counter*/
+	/*enable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
+	l |= slave->length_of_transfer << 16;
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
 
 	pr_info("%s: MCSPI_XFERLEVEL:0x%x\n", DRIVER_NAME, l);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
+	/*
+	 * clr bit(13 and 12) in chconf,
+	 * spi is set in transmit and receive mode
+	 */
+	l &= ~MCSPI_CHCONF_TRM;
+
+	if (slave->mode == MCSPI_MODE_RM)
+		l |= MCSPI_CHCONF_RM;
+	else if (slave->mode == MCSPI_MODE_TM)
+		l |= MCSPI_CHCONF_TM;
+
+	/*
+	 * available is only form 4 bits to 32 bits per word
+	 * before setting clear all WL bits
+	 */
+	l &= ~MCSPI_CHCONF_WL;
+	l |= (slave->bits_per_word-1) << 7;
 
 	l &= ~MCSPI_CHCONF_FFER;
 	l &= ~MCSPI_CHCONF_FFEW;
@@ -562,24 +593,6 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 
 	l &= ~MCSPI_CHCONF_PHA;
 	l &= ~MCSPI_CHCONF_POL;
-
-	/*
-	 * clr bit(13 and 12) in chconf,
-	 * spi is set in transmit and receive mode
-	 */
-	l &= ~MCSPI_CHCONF_TRM;
-
-	if (slave->mode == MCSPI_MODE_RM)
-		l |= MCSPI_CHCONF_RM;
-	else if (slave->mode == MCSPI_MODE_TM)
-		l |= MCSPI_CHCONF_TM;
-
-	/*
-	 * available is only form 4 bits to 32 bits per word
-	 * before setting clear all WL bits
-	 */
-	l &= ~MCSPI_CHCONF_WL;
-	l |= (slave->bits_per_word-1) << 7;
 
 	/*setting a line which is selected for reception */
 	if (slave->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
@@ -854,8 +867,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (wait_event_interruptible(slave->wait, 1))
 		return ret;
 
-
-
 	return ret;
 
 	pr_info("%s: register device\n", DRIVER_NAME);
@@ -1110,7 +1121,6 @@ static unsigned int spislave_event_poll(struct file *filp,
 		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
 		return -EFAULT;
 	}
-
 
 	pr_info("%s: POLL method!!\n", DRIVER_NAME);
 	poll_wait(filp, &slave->wait, wait);

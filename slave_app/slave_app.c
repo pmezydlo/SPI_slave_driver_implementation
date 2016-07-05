@@ -125,11 +125,11 @@ int main(int argc, char *argv[])
 
 	uint32_t		tx_offset;
 	uint32_t		rx_offset;
-	uint32_t		bits_per_word = 32;
-	uint32_t		mode;
-	uint32_t		buf_depth;
-	uint32_t		bytes_per_load;
-	uint32_t		length_of_transfer;
+	uint32_t		bits_per_word = 8;
+	uint32_t		mode = 0;
+	uint32_t		buf_depth = 32;
+	uint32_t		bytes_per_load = 4;
+	uint32_t		length_of_transfer = 8;
 
 	read_flag = write_flag = 0;
 
@@ -144,6 +144,12 @@ int main(int argc, char *argv[])
 	printf("Open:%s\n", device);
 
 	ret = ioctl(pollfds.fd, SPISLAVE_WR_BITS_PER_WORD, &bits_per_word);
+	ret = ioctl(pollfds.fd, SPISLAVE_WR_MODE, &mode);
+	ret = ioctl(pollfds.fd, SPISLAVE_WR_BUF_DEPTH, &buf_depth);
+	ret = ioctl(pollfds.fd, SPISLAVE_WR_LENGTH_OF_TRANSFER,
+		    &length_of_transfer);
+	ret = ioctl(pollfds.fd, SPISLAVE_WR_BYTES_PER_LOAD, &bytes_per_load);
+
 	if (ret == -1)
 		printf("Can't write bits per word\n");
 
@@ -185,10 +191,6 @@ int main(int argc, char *argv[])
 	printf("Length of transfer:%d\n", length_of_transfer);
 
 
-	ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
-	if (ret == -1)
-		printf("Cant't call clr transfer\n");
-
 	ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
 	if (ret == -1)
 		printf("Cant't call set transfer\n");
@@ -197,9 +199,6 @@ int main(int argc, char *argv[])
 	if (ret == -1)
 		printf("Can't call mcspi enabled\n");
 
-	ret = ioctl(pollfds.fd, SPISLAVE_DISABLED);
-	if (ret == -1)
-		printf("Can't call mcspi disabled\n");
 
 	if (read_flag) {
 
