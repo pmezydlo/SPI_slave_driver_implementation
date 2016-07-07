@@ -425,6 +425,14 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
 
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
+
+	if (l & MCSPI_CHSTAT_EOT) {
+		pr_info("%s: end of transfer is set\n", DRIVER_NAME);
+		wake_up_interruptible(&slave->wait);
+	} else
+		pr_info("%s: end of transfer is clr\n", DRIVER_NAME);
+
 	return (irq_handler_t) IRQ_HANDLED;
 }
 
@@ -851,6 +859,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
+	INIT_LIST_HEAD(&slave->device_entry);
+
 	minor = find_first_zero_bit(minors, N_SPI_MINORS);
 
 	if (minor < N_SPI_MINORS) {
@@ -872,11 +882,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		set_bit(minor, minors);
 		list_add(&slave->device_entry, &device_list);
 	}
-
-	init_waitqueue_head(&slave->wait);
-
-	if (wait_event_interruptible(slave->wait, 1))
-		return ret;
 
 	return ret;
 
@@ -1018,6 +1023,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	slave->users++;
 	filp->private_data = slave;
 	nonseekable_open(inode, filp);
+	init_waitqueue_head(&slave->wait);
 
 	pr_info("%s: open\n", DRIVER_NAME);
 	return ret;
@@ -1140,6 +1146,8 @@ static unsigned int spislave_event_poll(struct file *filp,
 	unsigned int events = 0;
 
 	slave = filp->private_data;
+
+	pr_info("%s: poll:%d\n", DRIVER_NAME, slave->buf_depth);
 
 	if (slave == NULL) {
 		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
