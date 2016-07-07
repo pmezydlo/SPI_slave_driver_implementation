@@ -23,148 +23,155 @@
 
 #include "spi-slave-dev.h"
 
-#define MCSPI_PIN_DIR_D0_IN_D1_OUT	0
-#define MCSPI_PIN_DIR_D0_OUT_D1_IN	1
-#define MCSPI_CS_POLARITY_ACTIVE_HIGH	1
-#define MCSPI_CS_POLARITY_ACTIVE_LOW	0
-#define MCSPI_CS_SENSITIVE_ENABLED	1
-#define MCSPI_CS_SENSITIVE_DISABLED	0
-#define MCSPI_MAX_FIFO_DEPTH		64
+#define MCSPI_PIN_DIR_D0_IN_D1_OUT		0
+#define MCSPI_PIN_DIR_D0_OUT_D1_IN		1
+#define MCSPI_CS_POLARITY_ACTIVE_HIGH		1
+#define MCSPI_CS_POLARITY_ACTIVE_LOW		0
+#define MCSPI_CS_SENSITIVE_ENABLED		1
+#define MCSPI_CS_SENSITIVE_DISABLED		0
+#define MCSPI_MAX_FIFO_DEPTH			64
 
-#define MCSPI_MODE_TRM			0
-#define MCSPI_MODE_RM			1
-#define MCSPI_MODE_TM			2
+#define MCSPI_MODE_TRM				0
+#define MCSPI_MODE_RM				1
+#define MCSPI_MODE_TM				2
 
-#define SPI_MCSPI_SLAVE_BUF_DEPTH	64
-#define SPI_MCSPI_SLAVE_BITS_PER_WORD	8
-#define SPI_MCSPI_SLAVE_CS_SENSITIVE	MCSPI_CS_SENSITIVE_ENABLED
-#define SPI_MCSPI_SLAVE_CS_POLARITY	MCSPI_CS_POLARITY_ACTIVE_LOW
-#define SPI_MCSPI_SLAVE_PIN_DIR		MCSPI_PIN_DIR_D0_IN_D1_OUT
-#define SPI_MCSPI_SLAVE_MODE		MCSPI_MODE_TRM
-#define SPI_MCSPI_SLAVE_COPY_LENGTH	4
+#define SPI_MCSPI_SLAVE_BUF_DEPTH		64
+#define SPI_MCSPI_SLAVE_BITS_PER_WORD		8
+#define SPI_MCSPI_SLAVE_CS_SENSITIVE		MCSPI_CS_SENSITIVE_ENABLED
+#define SPI_MCSPI_SLAVE_CS_POLARITY		MCSPI_CS_POLARITY_ACTIVE_LOW
+#define SPI_MCSPI_SLAVE_PIN_DIR			MCSPI_PIN_DIR_D0_IN_D1_OUT
+#define SPI_MCSPI_SLAVE_MODE			MCSPI_MODE_TRM
+#define SPI_MCSPI_SLAVE_COPY_LENGTH		1
+#define SPI_MCSPI_SLAVE_LENGTH_OF_TRANSFER	8
 
-#define MCSPI_SYSCONFIG			0x10
-#define MCSPI_SYSSTATUS			0x14
-#define MCSPI_IRQSTATUS			0x18
-#define MCSPI_IRQENABLE			0x1C
-#define MCSPI_SYST			0x24
-#define MCSPI_MODULCTRL			0x28
-#define MCSPI_CH0CONF			0x2C
-#define MCSPI_CH0STAT			0x30
-#define MCSPI_CH0CTRL			0x34
-#define MCSPI_TX0			0x38
-#define MCSPI_RX0			0x3C
-#define MCSPI_CH1CONF			0x40
-#define MCSPI_CH1STAT			0x44
-#define MCSPI_CH1CTRL			0x48
-#define MCSPI_TX1			0x4C
-#define MCSPI_RX1			0x50
-#define MCSPI_CH2CONF			0x54
-#define MCSPI_CH2STAT			0x58
-#define MCSPI_CH2CTRL			0x5C
-#define MCSPI_TX2			0x60
-#define MCSPI_RX2			0x64
-#define MCSPI_CH3CONF			0x68
-#define MCSPI_CH3STAT			0x6C
-#define MCSPI_CH3CTRL			0x70
-#define MCSPI_TX3			0x74
-#define MCSPI_RX3			0x78
-#define MCSPI_XFERLEVEL			0x7C
-#define MCSPI_DAFTX			0x80
-#define MCSPI_DAFRX			0xA0
+#define MCSPI_SYSCONFIG				0x10
+#define MCSPI_SYSSTATUS				0x14
+#define MCSPI_IRQSTATUS				0x18
+#define MCSPI_IRQENABLE				0x1C
+#define MCSPI_SYST				0x24
+#define MCSPI_MODULCTRL				0x28
+#define MCSPI_CH0CONF				0x2C
+#define MCSPI_CH0STAT				0x30
+#define MCSPI_CH0CTRL				0x34
+#define MCSPI_TX0				0x38
+#define MCSPI_RX0				0x3C
+#define MCSPI_CH1CONF				0x40
+#define MCSPI_CH1STAT				0x44
+#define MCSPI_CH1CTRL				0x48
+#define MCSPI_TX1				0x4C
+#define MCSPI_RX1				0x50
+#define MCSPI_CH2CONF				0x54
+#define MCSPI_CH2STAT				0x58
+#define MCSPI_CH2CTRL				0x5C
+#define MCSPI_TX2				0x60
+#define MCSPI_RX2				0x64
+#define MCSPI_CH3CONF				0x68
+#define MCSPI_CH3STAT				0x6C
+#define MCSPI_CH3CTRL				0x70
+#define MCSPI_TX3				0x74
+#define MCSPI_RX3				0x78
+#define MCSPI_XFERLEVEL				0x7C
+#define MCSPI_DAFTX				0x80
+#define MCSPI_DAFRX				0xA0
 
-#define SPI_AUTOSUSPEND_TIMEOUT		-1
+#define SPI_AUTOSUSPEND_TIMEOUT			-1
 
-#define MCSPI_SYSSTATUS_RESETDONE	BIT(0)
-#define MCSPI_MODULCTRL_MS		BIT(2)
-#define MCSPI_MODULCTRL_PIN34		BIT(1)
-#define MCSPI_CHCTRL_EN			BIT(0)
-#define MCSPI_CHCONF_EPOL		BIT(6)
+#define MCSPI_SYSSTATUS_RESETDONE		BIT(0)
+#define MCSPI_MODULCTRL_MS			BIT(2)
+#define MCSPI_MODULCTRL_PIN34			BIT(1)
+#define MCSPI_CHCTRL_EN				BIT(0)
+#define MCSPI_CHCONF_EPOL			BIT(6)
 
-#define MCSPI_CHCONF_TRM		(0x03 << 12)
-#define MCSPI_CHCONF_TM			BIT(13)
-#define MCSPI_CHCONF_RM			BIT(12)
+#define MCSPI_CHCONF_TRM			(0x03 << 12)
+#define MCSPI_CHCONF_TM				BIT(13)
+#define MCSPI_CHCONF_RM				BIT(12)
 
-#define MCSPI_CHCONF_WL			(0x1F << 7)
+#define MCSPI_CHCONF_WL				(0x1F << 7)
 
-#define MCSPI_CHCONF_WL_8BIT_MASK	(0x07 << 7)
-#define MCSPI_CHCONF_WL_16BIT_MASK	(0x0F << 7)
-#define MCSPI_CHCONF_WL_32BIT_MASK	(0x1F << 7)
+#define MCSPI_CHCONF_WL_8BIT_MASK		(0x07 << 7)
+#define MCSPI_CHCONF_WL_16BIT_MASK		(0x0F << 7)
+#define MCSPI_CHCONF_WL_32BIT_MASK		(0x1F << 7)
 
-#define MCSPI_CHCONF_IS			BIT(18)
-#define MCSPI_CHCONF_DPE0		BIT(16)
-#define MCSPI_CHCONF_DPE1		BIT(17)
-#define MCSPI_CHCONF_POL		BIT(1)
-#define MCSPI_CHCONF_PHA		BIT(0)
+#define MCSPI_CHCONF_IS				BIT(18)
+#define MCSPI_CHCONF_DPE0			BIT(16)
+#define MCSPI_CHCONF_DPE1			BIT(17)
+#define MCSPI_CHCONF_POL			BIT(1)
+#define MCSPI_CHCONF_PHA			BIT(0)
 
-#define MCSPI_IRQ_RX_OVERFLOW		BIT(3)
-#define MCSPI_IRQ_RX_FULL		BIT(2)
-#define MCSPI_IRQ_TX_UNDERFLOW		BIT(1)
-#define MCSPI_IRQ_TX_EMPTY		BIT(0)
-#define MCSPI_IRQ_EOW			BIT(17)
+#define MCSPI_IRQ_RX_OVERFLOW			BIT(3)
+#define MCSPI_IRQ_RX_FULL			BIT(2)
+#define MCSPI_IRQ_TX_UNDERFLOW			BIT(1)
+#define MCSPI_IRQ_TX_EMPTY			BIT(0)
+#define MCSPI_IRQ_EOW				BIT(17)
 
-#define MCSPI_SYSCONFIG_CLOCKACTIVITY	(0x03 << 8)
-#define MCSPI_SYSCONFIG_SIDLEMODE	(0x03 << 3)
-#define MCSPI_SYSCONFIG_SOFTRESET	BIT(1)
-#define MCSPI_SYSCONFIG_AUTOIDLE	BIT(0)
+#define MCSPI_SYSCONFIG_CLOCKACTIVITY		(0x03 << 8)
+#define MCSPI_SYSCONFIG_SIDLEMODE		(0x03 << 3)
+#define MCSPI_SYSCONFIG_SOFTRESET		BIT(1)
+#define MCSPI_SYSCONFIG_AUTOIDLE		BIT(0)
 
-#define MCSPI_IRQ_RESET			0xFFFFFFFF
+#define MCSPI_IRQ_RESET				0xFFFFFFFF
 
-#define MCSPI_XFER_AFL			(0x7 << 8)
-#define MCSPI_XFER_AEL			(0x7)
-#define MCSPI_XFER_WCNT			(0xFFFF << 16)
+#define MCSPI_XFER_AFL				(0x7 << 8)
+#define MCSPI_XFER_AEL				(0x7)
+#define MCSPI_XFER_WCNT				(0xFFFF << 16)
 
-#define MCSPI_CHCONF_FFER		BIT(28)
-#define MCSPI_CHCONF_FFEW		BIT(27)
+#define MCSPI_CHCONF_FFER			BIT(28)
+#define MCSPI_CHCONF_FFEW			BIT(27)
 
-#define MCSPI_MODULCTRL_MOA		BIT(7)
-#define MCSPI_MODULCTRL_FDAA		BIT(8)
+#define MCSPI_MODULCTRL_MOA			BIT(7)
+#define MCSPI_MODULCTRL_FDAA			BIT(8)
 
-#define MCSPI_CHSTAT_EOT		BIT(2)
-#define MCSPI_CHSTAT_TXS		BIT(1)
-#define MCSPI_CHSTAT_RXS		BIT(0)
-#define MCSPI_CHSTAT_RXFFF		BIT(6)
-#define MCSPI_CHSTAT_RXFFE		BIT(5)
-#define MCSPI_CHSTAT_TXFFF		BIT(4)
-#define MCSPI_CHSTAT_TXFFE		BIT(3)
+#define MCSPI_CHSTAT_EOT			BIT(2)
+#define MCSPI_CHSTAT_TXS			BIT(1)
+#define MCSPI_CHSTAT_RXS			BIT(0)
+#define MCSPI_CHSTAT_RXFFF			BIT(6)
+#define MCSPI_CHSTAT_RXFFE			BIT(5)
+#define MCSPI_CHSTAT_TXFFF			BIT(4)
+#define MCSPI_CHSTAT_TXFFE			BIT(3)
 
-#define SPI_SLAVE_SET_FLAG		1
-#define SPI_SLAVE_CLR_FLAG		0
-
-#define SPISLAVE_MAJOR			154
-#define N_SPI_MINORS			32
+#define SPISLAVE_MAJOR				154
+#define N_SPI_MINORS				32
 
 static					DECLARE_BITMAP(minors, N_SPI_MINORS);
 static					LIST_HEAD(device_list);
 static struct class			*spislave_class;
 
 struct spi_slave {
+	/*var defining device parameters*/
 	struct	device			*dev;
 	void	__iomem			*base;
 	u32				start;
 	u32				end;
-	unsigned int			mode;
 	unsigned int			reg_offset;
-	u32				bits_per_word;
-	u32				buf_depth;
+	s16				bus_num;
+
+	/*var defining cs and pin direct parameters*/
+	unsigned int			pin_dir;
 	u32				cs_sensitive;
 	u32				cs_polarity;
+
+	/*var defining interrupt*/
 	unsigned int			irq;
-	unsigned int			pin_dir;
-	void  __iomem			*tx;
-	void  __iomem			*rx;
+
+	/*var defining msg */
 	u32				tx_offset;
 	u32				rx_offset;
-	u32				bytes_per_load;
-	s16				bus_num;
+	void  __iomem			*tx;
+	void  __iomem			*rx;
+
+	/*var defining the char driver parameters*/
 	char				modalias[SPI_NAME_SIZE];
 	dev_t				devt;
 	struct	list_head		device_entry;
 	unsigned int			users;
 	wait_queue_head_t		wait;
-	unsigned int			tx_flag;
-	unsigned int			rx_flag;
+
+	/*var defining the transfer parameters*/
+	u32				mode;
 	u32				length_of_transfer;
+	u32				bytes_per_load;
+	u32				bits_per_word;
+	u32				buf_depth;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -306,7 +313,7 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 
 		} while (c);
 	}
-	slave->rx_flag = SPI_SLAVE_SET_FLAG;
+
 	return;
 out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
@@ -393,10 +400,8 @@ static void mcspi_slave_end_of_word_tasklet(unsigned long data)
 	struct spi_slave		*slave = (struct spi_slave *) data;
 
 	pr_info("%s: end of transaction!!", DRIVER_NAME);
-
-
 }
-DECLARE_TASKLET(end_of_word_tasklet, mcspi_slave_end_of_word_tasklet, 0);
+DECLARE_TASKLET(end_of_word_tasklet, mcspi_slave_end_of_word_tasklet, 1);
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
@@ -417,12 +422,6 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 		tasklet_schedule(&pio_tx_tasklet);
 	}
 
-	if (l & MCSPI_IRQ_EOW) {
-		l |= MCSPI_IRQ_EOW;
-		end_of_word_tasklet.data = (unsigned long)slave;
-		tasklet_schedule(&end_of_word_tasklet);
-	}
-
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
 
@@ -438,6 +437,9 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
 
+	l &= ~MCSPI_IRQ_RX_FULL;
+	l &= ~MCSPI_IRQ_TX_EMPTY;
+
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
 		l |= MCSPI_IRQ_RX_FULL;
 
@@ -445,7 +447,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
 		l |= MCSPI_IRQ_TX_EMPTY;
 
-	l |= MCSPI_IRQ_EOW;
+	l &= ~MCSPI_IRQ_EOW;
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
@@ -468,30 +470,20 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
 	u32				l;
 	int				ret = 0;
-	u8				*tx;
-	unsigned int			i;
-
-	static u8			tx_array[] = {0xDE, 0xAD, 0xBE, 0xEF,
-						      0x12, 0x21, 0x82, 0x13,
-						      0xAA, 0xAA, 0xAA, 0xAA,
-						      0xAA, 0xAA, 0xAA, 0xAA,
-						      0x70, 0x12, 0xAA, 0x55,
-						      0x21, 0x12, 0xFF, 0x00,
-						      0xEF, 0x19, 0x92, 0xA2,
-						      0x12, 0xDE, 0xFE, 0x12};
 
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
+
+	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
+	pr_info("%s: bits_per_word:%x\n", DRIVER_NAME, slave->bits_per_word);
+	pr_info("%s: bytes_per_load:%d\n", DRIVER_NAME, slave->bytes_per_load);
+	pr_info("%s: length_of_transfer:%d\n", DRIVER_NAME,
+		slave->length_of_transfer);
+	pr_info("%s: buf_depth:%d\n", DRIVER_NAME, slave->buf_depth);
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
 		slave->tx = kzalloc(slave->buf_depth, GFP_KERNEL);
 		if (slave->tx == NULL)
 			return -ENOMEM;
-
-		tx = slave->tx;
-
-		/*load data for tests*/
-		for (i = 0; i < 32; i++)
-			*tx++ = tx_array[i];
 	}
 
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM) {
@@ -517,7 +509,7 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	/*enable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
-	l |= slave->length_of_transfer << 16;
+	/*l |= (slave->length_of_transfer - 1) << 16;*/
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
 
@@ -541,7 +533,7 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	 * before setting clear all WL bits
 	 */
 	l &= ~MCSPI_CHCONF_WL;
-	l |= (slave->bits_per_word-1) << 7;
+	l |= (slave->bits_per_word - 1) << 7;
 
 	l &= ~MCSPI_CHCONF_FFER;
 	l &= ~MCSPI_CHCONF_FFEW;
@@ -570,6 +562,15 @@ static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 {
 	int		ret = 0;
 
+	pr_info("%s: clear transfer", DRIVER_NAME);
+
+	if (slave->tx != NULL)
+		kfree(slave->tx);
+
+	if (slave->rx != NULL)
+		kfree(slave->rx);
+
+	mcspi_slave_disable(slave);
 
 	return ret;
 }
@@ -674,7 +675,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
-
+	       /*
+		*mcspi_slave_setup_pio_transfer(slave);
+		*mcspi_slave_enable(slave);
+		*/
 		if (ret < 0)
 			return ret;
 
@@ -693,11 +697,11 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	tasklet_kill(&pio_rx_tasklet);
 	tasklet_kill(&pio_tx_tasklet);
 
-		if (slave->tx != NULL)
-			kfree(slave->tx);
+	if (slave->tx != NULL)
+		kfree(slave->tx);
 
-		if (slave->rx != NULL)
-			kfree(slave->rx);
+	if (slave->rx != NULL)
+		kfree(slave->rx);
 
 	kfree(slave);
 }
@@ -816,6 +820,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->cs_sensitive		= cs_sensitive;
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
+
+	/*default setting when user dosn't get your setting*/
+	slave->mode			= SPI_MCSPI_SLAVE_MODE;
+	slave->buf_depth		= SPI_MCSPI_SLAVE_BUF_DEPTH;
+	slave->bytes_per_load		= SPI_MCSPI_SLAVE_COPY_LENGTH;
+	slave->bits_per_word		= SPI_MCSPI_SLAVE_BITS_PER_WORD;
+	slave->length_of_transfer	= SPI_MCSPI_SLAVE_LENGTH_OF_TRANSFER;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -942,7 +953,6 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 		return -EFAULT;
 }
 
-
 static ssize_t spislave_write(struct file *flip, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
@@ -1061,18 +1071,23 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(slave->buf_depth, (__u32 __user *)arg);
 		break;
 
+	case SPISLAVE_RD_LENGTH_OF_TRANSFER:
+		ret = __put_user(slave->length_of_transfer,
+				 (__u32 __user *)arg);
+		break;
+
 	case SPISLAVE_ENABLED:
-		pr_info("%s: IOCTL mcspi set enabled", DRIVER_NAME);
+		pr_info("%s: IOCTL mcspi set enabled\n", DRIVER_NAME);
 		mcspi_slave_enable(slave);
 		break;
 
 	case SPISLAVE_DISABLED:
-		pr_info("%s: IOCTL mcspi set disaabled", DRIVER_NAME);
+		pr_info("%s: IOCTL mcspi set disaabled\n", DRIVER_NAME);
 		mcspi_slave_disable(slave);
 		break;
 
 	case SPISLAVE_SET_TRANSFER:
-		pr_info("%s: IOCTL mcspi set transfer", DRIVER_NAME);
+		pr_info("%s: IOCTL mcspi set transfer\n", DRIVER_NAME);
 		mcspi_slave_setup_pio_transfer(slave);
 		break;
 
@@ -1081,25 +1096,34 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		mcspi_slave_clr_pio_transfer(slave);
 		break;
 
+	case SPISLAVE_WR_LENGTH_OF_TRANSFER:
+		ret = __get_user(slave->length_of_transfer,
+				 (__u32 __user *)arg);
+		pr_info("%s: IOCTL length_of_transfer:%d\n", DRIVER_NAME,
+			slave->length_of_transfer);
+		break;
+
 	case SPISLAVE_WR_BITS_PER_WORD:
 		ret = __get_user(slave->bits_per_word, (__u32 __user *)arg);
+		pr_info("%s: IOCTL bits_per_word:%d\n", DRIVER_NAME,
+			slave->bits_per_word);
 		break;
 
 	case SPISLAVE_WR_MODE:
 		ret = __get_user(slave->mode, (__u32 __user *)arg);
+		pr_info("%s: IOCTL mode:%d\n", DRIVER_NAME, slave->mode);
 		break;
 
 	case SPISLAVE_WR_BUF_DEPTH:
 		ret = __get_user(slave->buf_depth, (__u32 __user *)arg);
+		pr_info("%s: IOCTL buf_depth:%d\n", DRIVER_NAME,
+			slave->buf_depth);
 		break;
 
 	case SPISLAVE_WR_BYTES_PER_LOAD:
 		ret = __get_user(slave->bytes_per_load, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_WR_LENGTH_OF_TRANSFER:
-		ret = __get_user(slave->length_of_transfer,
-				 (__u32 __user *)arg);
+		pr_info("%s: IOCTL bytes_per_load:%d\n", DRIVER_NAME,
+			slave->bytes_per_load);
 		break;
 
 	default:

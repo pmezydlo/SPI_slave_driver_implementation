@@ -13,18 +13,26 @@
 #define RX_ARRAY_SIZE	64
 
 static const char	*device = "/dev/spislave0";
-static uint8_t		bits_per_word = 8;
+
 static uint8_t		read_flag;
 static uint8_t		write_flag;
+
+static uint32_t		tx_offset;
+static uint32_t		rx_offset;
+static uint32_t		bits_per_word = 8;
+static uint32_t		mode;
+static uint32_t		buf_depth = 64;
+static uint32_t		bytes_per_load = 4;
+static uint32_t		length_of_transfer = 16;
 
 static int transfer_8bit(int fd)
 {
 	int		ret = 0;
-	uint8_t		tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};
-/*
- *	uint8_t	tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};
- *	uint8_t	tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
- */
+	/*uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};*/
+
+	uint8_t	tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};
+	/*uint8_t tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};*/
+
 	int		i;
 
 	ret = write(fd, tx, TX_ARRAY_SIZE);
@@ -69,13 +77,91 @@ static int read_8bit(int fd)
 	return ret;
 }
 
+static int put_setting(int fd)
+{
+	int		ret = 0;
+
+	ret = ioctl(fd, SPISLAVE_WR_BITS_PER_WORD, &bits_per_word);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_WR_MODE, &mode);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_WR_BUF_DEPTH, &buf_depth);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_WR_LENGTH_OF_TRANSFER,
+		    &length_of_transfer);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_WR_BYTES_PER_LOAD, &bytes_per_load);
+	if (ret == -1)
+		return -1;
+
+	return ret;
+}
+
+static int get_setting(int fd)
+{
+	int		ret = 0;
+
+	ret = ioctl(fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_BUF_DEPTH, &buf_depth);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_MODE, &mode);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_BYTES_PER_LOAD, &bytes_per_load);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_RD_LENGTH_OF_TRANSFER,
+		    &length_of_transfer);
+	if (ret == -1)
+		return -1;
+
+	return ret;
+}
+
+static void print_setting(void)
+{
+	printf("TX offset:%d, RX offset:%d, Bits per word:%d\n",
+	       tx_offset, rx_offset, bits_per_word);
+	printf("BUF depth:%d, Mode:%d, Bytes per load:%d\n",
+	       buf_depth, mode, bytes_per_load);
+	printf("Length of transfer:%d\n", length_of_transfer);
+}
+
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [-DRWb]\n", prog);
+	printf("Usage: %s [-drwbmlpe?]\n", prog);
 	puts("  -d --device	device to use (default /dev/spislave1\n"
 	     "  -r --read	reads the received data from device\n"
 	     "  -w --write	writes data to send\n"
-	     "  -b --bpw	bits per word (default 8 bits)\n");
+	     "  -b --bpw	bits per word (default 8 bits)\n"
+	     "  -l  --length	length of transfer (default 8 bytes)\n"
+	     "  -m  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
+	     "  -?  --help	print halp\n"
+	     "  -e  --bd	slave buffer depth\n"
+	     "  -p  --bpl	how many bytes after buf is reload\n");
 	exit(1);
 }
 
@@ -83,15 +169,20 @@ static void parse_opts(int argc, char *argv[])
 {
 	while (1) {
 		static const struct option lopts[] = {
-			{ "device", 1, 0, 'd' },
-			{ "read",   0, 0, 'r' },
-			{ "write",  0, 0, 'w' },
-			{ "bpw",    1, 0, 'b' },
-			{ NULL,	    0, 0,  0  },
+			{ "device", required_argument,	0, 'd' },
+			{ "read",   no_argument,	0, 'r' },
+			{ "write",  no_argument,	0, 'w' },
+			{ "bpw",    required_argument,	0, 'b' },
+			{ "mode",   required_argument,	0, 'm' },
+			{ "length", required_argument,	0, 'l' },
+			{ "bpl",    required_argument,  0, 'p' },
+			{ "bd",	    required_argument,  0, 'e' },
+			{ "help",   no_argument,	0, '?' },
+			{ NULL,	    0,			0,  0  },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:r:w:b", lopts, NULL);
+		c = getopt_long(argc, argv, "d:r:w:b:m:l:p:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -109,8 +200,22 @@ static void parse_opts(int argc, char *argv[])
 		case 'b':
 			bits_per_word = atoi(optarg);
 			break;
+		case 'e':
+			length_of_transfer = atoi(optarg);
+			break;
+		case 'p':
+			bytes_per_load = atoi(optarg);
+			break;
+		case 'm':
+			mode = atoi(optarg);
+			break;
+		case 'l':
+			length_of_transfer = atoi(optarg);
+			break;
+		case '?':
+			print_usage(device);
+			break;
 		default:
-			print_usage(argv[0]);
 			break;
 		}
 	}
@@ -122,14 +227,6 @@ int main(int argc, char *argv[])
 	int			i;
 	int			timeout = 10000; /*timeout in msec*/
 	struct pollfd		pollfds;
-
-	uint32_t		tx_offset;
-	uint32_t		rx_offset;
-	uint32_t		bits_per_word = 8;
-	uint32_t		mode = 0;
-	uint32_t		buf_depth = 32;
-	uint32_t		bytes_per_load = 4;
-	uint32_t		length_of_transfer = 8;
 
 	read_flag = write_flag = 0;
 
@@ -143,97 +240,47 @@ int main(int argc, char *argv[])
 
 	printf("Open:%s\n", device);
 
-	ret = ioctl(pollfds.fd, SPISLAVE_WR_BITS_PER_WORD, &bits_per_word);
-	ret = ioctl(pollfds.fd, SPISLAVE_WR_MODE, &mode);
-	ret = ioctl(pollfds.fd, SPISLAVE_WR_BUF_DEPTH, &buf_depth);
-	ret = ioctl(pollfds.fd, SPISLAVE_WR_LENGTH_OF_TRANSFER,
-		    &length_of_transfer);
-	ret = ioctl(pollfds.fd, SPISLAVE_WR_BYTES_PER_LOAD, &bytes_per_load);
-
 	if (ret == -1)
 		printf("Can't write bits per word\n");
 
-	bits_per_word = 0;
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_BITS_PER_WORD, &bits_per_word);
-	if (ret == -1)
-		printf("Can't read bits per word\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
-	if (ret == -1)
-		printf("Cant't read rx_offset\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
-	if (ret == -1)
-		printf("Cant't read tx_offset\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_BUF_DEPTH, &buf_depth);
-	if (ret == -1)
-		printf("Can't read buf_depth\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_MODE, &mode);
-	if (ret == -1)
-		printf("Cant't read mode\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_BYTES_PER_LOAD, &bytes_per_load);
-	if (ret == -1)
-		printf("Cant't read bytes_per_load\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_RD_LENGTH_OF_TRANSFER,
-		    &length_of_transfer);
-	if (ret == -1)
-		printf("Cant't read length_of_transfer\n");
-
-	printf("TX offset:%d, RX offset:%d, Bits per word:%d\n",
-	       tx_offset, rx_offset, bits_per_word);
-	printf("BUF depth:%d, Mode:%d, Bytes per load:%d\n",
-	       buf_depth, mode, bytes_per_load);
-	printf("Length of transfer:%d\n", length_of_transfer);
-
-
-	ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
-	if (ret == -1)
-		printf("Cant't call set transfer\n");
-
-	ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
-	if (ret == -1)
-		printf("Can't call mcspi enabled\n");
-
+	print_setting();
 
 	if (read_flag) {
+		ret = read_8bit(pollfds.fd);
+		if (ret < 0) {
+			printf("Failed to reads!\n");
+			return -1;
+		}
 
-		while (1) {
-			ret = poll(&pollfds, 1, timeout);
-
-			switch (ret) {
-			case 0:
-				printf("timeout\n");
-				break;
-
-			case -1:
-				printf("poll error\n");
-				exit(1);
-
-			default:
-				if (pollfds.revents & POLLIN) {
-					ret = read_8bit(pollfds.fd);
-
-					if (ret < 0) {
-						printf("Failed to reads!\n");
-						return -1;
-					}
-					exit(0);
-				}
-				break;
-			}
+		ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
+		if (ret == -1) {
+			printf("Can't call clr transfer\n");
+			return -1;
 		}
 	}
 
 	if (write_flag) {
-		ret = transfer_8bit(pollfds.fd);
+		ret = put_setting(pollfds.fd);
+		if (ret == -1) {
+			printf("Can't put setting!!\n");
+			return -1;
+		}
 
-		if (ret < 0) {
-			printf("Failed to writes massage!\n");
+		ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
+		if (ret == -1) {
+			printf("Cant't call set transfer\n");
+			return -1;
+		}
+
+		ret = transfer_8bit(pollfds.fd);
+		if (ret == -1) {
+			printf("Can't put msg\n");
+			return -1;
+		}
+
+		ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
+		if (ret == -1) {
+			printf("Can't call mcspi enabled\n");
 			return -1;
 		}
 	}
