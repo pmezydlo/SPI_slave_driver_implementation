@@ -23,14 +23,13 @@ static uint32_t		bits_per_word = 8;
 static uint32_t		mode;
 static uint32_t		buf_depth = 64;
 static uint32_t		bytes_per_load = 4;
-static uint32_t		length_of_transfer = 16;
 
 static int transfer_8bit(int fd)
 {
 	int		ret = 0;
-	/*uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};*/
+	uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};
 
-	uint8_t	tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};
+	/*uint8_t tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};*/
 	/*uint8_t tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};*/
 
 	int		i;
@@ -59,16 +58,23 @@ static int read_8bit(int fd)
 	uint8_t		rx[RX_ARRAY_SIZE];
 	int		ret;
 	int		i;
+	uint32_t	length;
 
 	printf("Receive:\n");
 
-	ret = read(fd, rx, RX_ARRAY_SIZE);
+	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &length);
+	if (ret == -1) {
+		printf("failed to read the length?\n");
+		return -1;
+	}
+
+	ret = read(fd, rx, length);
 	if (ret < 0) {
 		printf("failed to read the message!\n");
 		return -1;
 	}
 
-	for (i = 0; i < RX_ARRAY_SIZE; i++) {
+	for (i = 0; i < length; i++) {
 		printf("0x%.2X ", rx[i]);
 
 		if (i%8 == 7)
@@ -90,11 +96,6 @@ static int put_setting(int fd)
 		return -1;
 
 	ret = ioctl(fd, SPISLAVE_WR_BUF_DEPTH, &buf_depth);
-	if (ret == -1)
-		return -1;
-
-	ret = ioctl(fd, SPISLAVE_WR_LENGTH_OF_TRANSFER,
-		    &length_of_transfer);
 	if (ret == -1)
 		return -1;
 
@@ -133,11 +134,6 @@ static int get_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_LENGTH_OF_TRANSFER,
-		    &length_of_transfer);
-	if (ret == -1)
-		return -1;
-
 	return ret;
 }
 
@@ -147,7 +143,6 @@ static void print_setting(void)
 	       tx_offset, rx_offset, bits_per_word);
 	printf("BUF depth:%d, Mode:%d, Bytes per load:%d\n",
 	       buf_depth, mode, bytes_per_load);
-	printf("Length of transfer:%d\n", length_of_transfer);
 }
 
 static void print_usage(const char *prog)
@@ -157,7 +152,6 @@ static void print_usage(const char *prog)
 	     "  -r --read	reads the received data from device\n"
 	     "  -w --write	writes data to send\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
-	     "  -l  --length	length of transfer (default 8 bytes)\n"
 	     "  -m  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
 	     "  -?  --help	print halp\n"
 	     "  -e  --bd	slave buffer depth\n"
@@ -174,7 +168,6 @@ static void parse_opts(int argc, char *argv[])
 			{ "write",  no_argument,	0, 'w' },
 			{ "bpw",    required_argument,	0, 'b' },
 			{ "mode",   required_argument,	0, 'm' },
-			{ "length", required_argument,	0, 'l' },
 			{ "bpl",    required_argument,  0, 'p' },
 			{ "bd",	    required_argument,  0, 'e' },
 			{ "help",   no_argument,	0, '?' },
@@ -182,7 +175,7 @@ static void parse_opts(int argc, char *argv[])
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:r:w:b:m:l:p:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:r:w:b:m:p:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -200,17 +193,14 @@ static void parse_opts(int argc, char *argv[])
 		case 'b':
 			bits_per_word = atoi(optarg);
 			break;
-		case 'e':
-			length_of_transfer = atoi(optarg);
-			break;
 		case 'p':
 			bytes_per_load = atoi(optarg);
 			break;
 		case 'm':
 			mode = atoi(optarg);
 			break;
-		case 'l':
-			length_of_transfer = atoi(optarg);
+		case 'e':
+			buf_depth = atoi(optarg);
 			break;
 		case '?':
 			print_usage(device);
@@ -225,7 +215,7 @@ int main(int argc, char *argv[])
 {
 	int			ret = 0;
 	int			i;
-	int			timeout = 10000; /*timeout in msec*/
+	int			timeout = 30000; /*timeout in msec*/
 	struct pollfd		pollfds;
 
 	read_flag = write_flag = 0;
@@ -244,20 +234,6 @@ int main(int argc, char *argv[])
 		printf("Can't write bits per word\n");
 
 	print_setting();
-
-	if (read_flag) {
-		ret = read_8bit(pollfds.fd);
-		if (ret < 0) {
-			printf("Failed to reads!\n");
-			return -1;
-		}
-
-		ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
-		if (ret == -1) {
-			printf("Can't call clr transfer\n");
-			return -1;
-		}
-	}
 
 	if (write_flag) {
 		ret = put_setting(pollfds.fd);
@@ -281,6 +257,40 @@ int main(int argc, char *argv[])
 		ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
 		if (ret == -1) {
 			printf("Can't call mcspi enabled\n");
+			return -1;
+		}
+	}
+
+	if (read_flag) {
+		while (1) {
+			ret = poll(&pollfds, 1, timeout);
+
+			switch (ret) {
+			case 0:
+				printf("timeout\n");
+				break;
+
+			case -1:
+				printf("poll error\n");
+				exit(1);
+
+			default:
+				if (pollfds.revents & POLLIN) {
+					ret = read_8bit(pollfds.fd);
+
+					if (ret < 0) {
+						printf("Failed to reads!\n");
+						return -1;
+					}
+					exit(0);
+				}
+				break;
+			}
+		}
+
+		ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
+		if (ret == -1) {
+			printf("Can't call clr transfer\n");
 			return -1;
 		}
 	}

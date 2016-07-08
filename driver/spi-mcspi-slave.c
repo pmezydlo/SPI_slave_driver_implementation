@@ -42,7 +42,6 @@
 #define SPI_MCSPI_SLAVE_PIN_DIR			MCSPI_PIN_DIR_D0_IN_D1_OUT
 #define SPI_MCSPI_SLAVE_MODE			MCSPI_MODE_TRM
 #define SPI_MCSPI_SLAVE_COPY_LENGTH		1
-#define SPI_MCSPI_SLAVE_LENGTH_OF_TRANSFER	8
 
 #define MCSPI_SYSCONFIG				0x10
 #define MCSPI_SYSSTATUS				0x14
@@ -168,7 +167,6 @@ struct spi_slave {
 
 	/*var defining the transfer parameters*/
 	u32				mode;
-	u32				length_of_transfer;
 	u32				bytes_per_load;
 	u32				bits_per_word;
 	u32				buf_depth;
@@ -273,8 +271,6 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 				goto out;
 
 			*rx++ = readl_relaxed(rx_reg);
-			pr_info("%s: read 8:0x%02x\n", DRIVER_NAME, *(rx-1));
-
 		} while (c);
 	}
 
@@ -291,8 +287,6 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 				goto out;
 
 			*rx++ = readl_relaxed(rx_reg);
-			pr_info("%s: read 16:0x%04x\n", DRIVER_NAME, *(rx-1));
-
 		} while (c);
 	}
 
@@ -309,8 +303,6 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 				goto out;
 
 			*rx++ = readl_relaxed(rx_reg);
-			pr_info("%s: read 32:0x%04x\n", DRIVER_NAME, *(rx-1));
-
 		} while (c);
 	}
 
@@ -351,7 +343,6 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 						     < 0)
 				goto out;
 
-			pr_info("%s: write 8:0x%02x\n", DRIVER_NAME, *tx);
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
 	}
@@ -367,7 +358,6 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 						     < 0)
 				goto out;
 
-			pr_info("%s: write 16:0x%04x\n", DRIVER_NAME, *tx);
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
 	}
@@ -384,7 +374,6 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 						     < 0)
 				goto out;
 
-			pr_info("%s: write 32:0x%04x\n", DRIVER_NAME, *tx);
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
 	}
@@ -394,14 +383,6 @@ out:
 	pr_err("%s: timeout!!!", DRIVER_NAME);
 }
 DECLARE_TASKLET(pio_tx_tasklet, mcspi_slave_pio_tx_transfer, 0);
-
-static void mcspi_slave_end_of_word_tasklet(unsigned long data)
-{
-	struct spi_slave		*slave = (struct spi_slave *) data;
-
-	pr_info("%s: end of transaction!!", DRIVER_NAME);
-}
-DECLARE_TASKLET(end_of_word_tasklet, mcspi_slave_end_of_word_tasklet, 1);
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
@@ -484,8 +465,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
 	pr_info("%s: bits_per_word:%x\n", DRIVER_NAME, slave->bits_per_word);
 	pr_info("%s: bytes_per_load:%d\n", DRIVER_NAME, slave->bytes_per_load);
-	pr_info("%s: length_of_transfer:%d\n", DRIVER_NAME,
-		slave->length_of_transfer);
 	pr_info("%s: buf_depth:%d\n", DRIVER_NAME, slave->buf_depth);
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
@@ -517,7 +496,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	/*enable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
-	/*l |= (slave->length_of_transfer - 1) << 16;*/
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
 
@@ -834,7 +812,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->buf_depth		= SPI_MCSPI_SLAVE_BUF_DEPTH;
 	slave->bytes_per_load		= SPI_MCSPI_SLAVE_COPY_LENGTH;
 	slave->bits_per_word		= SPI_MCSPI_SLAVE_BITS_PER_WORD;
-	slave->length_of_transfer	= SPI_MCSPI_SLAVE_LENGTH_OF_TRANSFER;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -1077,11 +1054,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(slave->buf_depth, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_LENGTH_OF_TRANSFER:
-		ret = __put_user(slave->length_of_transfer,
-				 (__u32 __user *)arg);
-		break;
-
 	case SPISLAVE_ENABLED:
 		pr_info("%s: IOCTL mcspi set enabled\n", DRIVER_NAME);
 		mcspi_slave_enable(slave);
@@ -1100,13 +1072,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	case SPISLAVE_CLR_TRANSFER:
 		pr_info("%s: IOCTL mcspi clt transfer", DRIVER_NAME);
 		mcspi_slave_clr_pio_transfer(slave);
-		break;
-
-	case SPISLAVE_WR_LENGTH_OF_TRANSFER:
-		ret = __get_user(slave->length_of_transfer,
-				 (__u32 __user *)arg);
-		pr_info("%s: IOCTL length_of_transfer:%d\n", DRIVER_NAME,
-			slave->length_of_transfer);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
