@@ -389,6 +389,14 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 	struct spi_slave	*slave = dev_id;
 	u32			l;
 
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
+
+	if (l & MCSPI_CHSTAT_EOT) {
+		pr_info("%s: end of transfer is set\n", DRIVER_NAME);
+		wake_up_interruptible(&slave->wait);
+	} else
+		pr_info("%s: end of transfer is clr\n", DRIVER_NAME);
+
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
 
 	if (l & MCSPI_IRQ_RX_FULL) {
@@ -405,14 +413,6 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 
 	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
-
-	if (l & MCSPI_CHSTAT_EOT) {
-		pr_info("%s: end of transfer is set\n", DRIVER_NAME);
-		wake_up_interruptible(&slave->wait);
-	} else
-		pr_info("%s: end of transfer is clr\n", DRIVER_NAME);
 
 	return (irq_handler_t) IRQ_HANDLED;
 }
