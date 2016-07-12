@@ -24,9 +24,9 @@ script:
   - export ARCH=arm
   - export CROSS_COMPILE=arm-linux-gnueabihf-
  
-  - sudo make -j3 LOCALVERSION=$BUILD_V mrproper
+  - sudo make ARCH=arm LOCALVERSION=$BUILD_V CROSS_COMPILE=arm-linux-gnueabihf- mrproper 
   - wget -c http://rcn-ee.net/deb/jessie-armhf/v$KERN_V$BUILD_V/defconfig -O .config
-  - sudo make -j3 LOCALVERSION=$BUILD_V modules
+  - sudo make ARCH=arm LOCALVERSION=$BUILD_V CROSS_COMPILE=arm-linux-gnueabihf- modules
 
   - cd $MYHOME/
 
