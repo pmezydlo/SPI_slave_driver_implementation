@@ -10,19 +10,23 @@ before_install:
   - sudo apt-get install bc
 
 before_script:
+  - export KERN_V=4.4.8
+  - export BUILD_V=-ti-rt-r22
+
   - export MYHOME=$PWD
-  - wget https://github.com/beagleboard/linux/archive/4.4.8-ti-rt-r22.tar.gz
-  - tar zvxf 4.4.8-ti-rt-r22.tar.gz
-  - export DST_KERNEL=$PWD/linux-4.4.8-ti-rt-r22
+  - wget https://github.com/beagleboard/linux/archive/$KERN_V$BUILD_V.tar.gz
+  - tar xf $KERN_V$BUILD_V.tar.gz
+  - export DST_KERNEL=$PWD/linux-$KERN_V$BUILD_V
 
 script:
   - cd $DST_KERNEL
   
   - export ARCH=arm
   - export CROSS_COMPILE=arm-linux-gnueabihf-
-  - sudo make -j3 mrproper
-  - sudo make -j3 defconfig
-  - sudo make -j3 modules
+ 
+  - sudo make -j3 LOCALVERSION=$BUILD_V mrproper
+  - wget -c http://rcn-ee.net/deb/jessie-armhf/v$KERN_V$BUILD_V/defconfig -O .config
+  - sudo make -j3 LOCALVERSION=$BUILD_V modules
 
   - cd $MYHOME/
 
