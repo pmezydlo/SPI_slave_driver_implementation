@@ -39,4 +39,9 @@ script:
   - make -j3 modules ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION 2>&1 
 
   - cd $DST_PROJECT/
+
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f test_master_app/*
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/*
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/* 
+
   - make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION

@@ -344,6 +344,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 				goto out;
 
 			writel_relaxed(*tx++, tx_reg);
+			pr_info("%s: write: 0x%02x\n", DRIVER_NAME, *tx);
 		} while (c);
 	}
 
@@ -351,7 +352,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	const u16 *tx;
 
 	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u8) * c);
+	slave->tx_offset += (sizeof(u16) * c);
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -366,7 +367,7 @@ static void mcspi_slave_pio_tx_transfer(unsigned long data)
 	const u32 *tx;
 
 	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u8) * c);
+	slave->tx_offset += (sizeof(u32) * c);
 
 		do {
 			c -= 1;
@@ -490,9 +491,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	 */
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
 		l  |= (slave->bytes_per_load - 1) << 8;
-
-	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l  |= (slave->bytes_per_load - 1);
 
 	/*enable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
@@ -941,6 +939,7 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	ssize_t			ret = 0;
 	struct spi_slave	*slave;
 	unsigned long		missing;
+	u32			l;
 
 	slave = flip->private_data;
 
@@ -963,7 +962,14 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	else
 		return -EFAULT;
 
-	/*mcspi_slave_pio_tx_load(slave, count);*/
+
+	pr_info("%s: write count:%d\n", DRIVER_NAME, count);
+	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
+
+	l  |= (32 - count);
+
+	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
+
 	slave->tx_offset = 0;
 
 	pr_info("%s: write\n", DRIVER_NAME);
@@ -992,7 +998,6 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	list_for_each_entry(slave, &device_list, device_entry) {
 		if (slave->devt == inode->i_rdev) {
 			ret = 0;
-			pr_info("%s: for each ret = 0\n", DRIVER_NAME);
 			break;
 		}
 	}
@@ -1055,46 +1060,35 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SPISLAVE_ENABLED:
-		pr_info("%s: IOCTL mcspi set enabled\n", DRIVER_NAME);
 		mcspi_slave_enable(slave);
 		break;
 
 	case SPISLAVE_DISABLED:
-		pr_info("%s: IOCTL mcspi set disaabled\n", DRIVER_NAME);
 		mcspi_slave_disable(slave);
 		break;
 
 	case SPISLAVE_SET_TRANSFER:
-		pr_info("%s: IOCTL mcspi set transfer\n", DRIVER_NAME);
 		mcspi_slave_setup_pio_transfer(slave);
 		break;
 
 	case SPISLAVE_CLR_TRANSFER:
-		pr_info("%s: IOCTL mcspi clt transfer", DRIVER_NAME);
 		mcspi_slave_clr_pio_transfer(slave);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
 		ret = __get_user(slave->bits_per_word, (__u32 __user *)arg);
-		pr_info("%s: IOCTL bits_per_word:%d\n", DRIVER_NAME,
-			slave->bits_per_word);
 		break;
 
 	case SPISLAVE_WR_MODE:
 		ret = __get_user(slave->mode, (__u32 __user *)arg);
-		pr_info("%s: IOCTL mode:%d\n", DRIVER_NAME, slave->mode);
 		break;
 
 	case SPISLAVE_WR_BUF_DEPTH:
 		ret = __get_user(slave->buf_depth, (__u32 __user *)arg);
-		pr_info("%s: IOCTL buf_depth:%d\n", DRIVER_NAME,
-			slave->buf_depth);
 		break;
 
 	case SPISLAVE_WR_BYTES_PER_LOAD:
 		ret = __get_user(slave->bytes_per_load, (__u32 __user *)arg);
-		pr_info("%s: IOCTL bytes_per_load:%d\n", DRIVER_NAME,
-			slave->bytes_per_load);
 		break;
 
 	default:
@@ -1112,16 +1106,12 @@ static unsigned int spislave_event_poll(struct file *filp,
 
 	slave = filp->private_data;
 
-	pr_info("%s: poll:%d\n", DRIVER_NAME, slave->buf_depth);
-
 	if (slave == NULL) {
 		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
 		return -EFAULT;
 	}
 
-	pr_info("%s: POLL method!!\n", DRIVER_NAME);
 	poll_wait(filp, &slave->wait, wait);
-	pr_info("%s: poll end of wait!!\n", DRIVER_NAME);
 	if (slave->rx_offset != 0)
 		events = POLLIN | POLLRDNORM;
 

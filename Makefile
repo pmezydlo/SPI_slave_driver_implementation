@@ -3,9 +3,10 @@ COMPILER := arm-linux-gnueabihf-
 COMPILER_V := gcc
 PWD := $(shell pwd)
 KERN_V= 4.4.8
-BUILD_V= -ti-rt-r22
+BUILD_V= -ti-r22
+SOURCE=linux-stable-rcn-ee
 
-KDIR := $(PWD)/linux-$(KERN_V)$(BUILD_V)
+KDIR := $(PWD)/$(SOURCE)-$(KERN_V)$(BUILD_V)
 
 obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o
 
