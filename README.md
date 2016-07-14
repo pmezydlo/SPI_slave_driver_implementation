@@ -23,5 +23,7 @@ More information is here:
 <h2>License</h2>
 SPI slave driver is released under the GPLv2 license.
 
+<h2>Images</h2>
+<img src="https://raw.githubusercontent.com/pmezydlo/SPI_slave_driver_implementation/master/documentation/top_img.png" alt=""/>	
 
 

@@ -15,6 +15,7 @@
 	<li><a href="#slave-driver-in-linux-architecture">Slave driver in Linux architecture</a></li>	
 	<li><a href="#problems">Problems</a></li>
 	<li><a href="#development-timeline">Development timeline</a></li>
+        <li><a href="#photos-from-tests">Photos from tests</a></li>
 	<li><a href="#am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</a></li>
 	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
 	<li><a href="#building-on-beaglebone-board">Building driver on BeagleBone Board</a></li>	
@@ -34,6 +35,7 @@
 		by slave device. To receive and send back data, two transactions are needed. The data received from master device 
 		in a single transaction is transferred to the user after completing the transaction. The user's reply to received 
 		data is sent in the next transaction.</p>
+<img src="top_img.png" alt=""/>
 <ul>
         <li>Student: Patryk Mezydlo</li>
 	<li>Mentors: Michael Welling, Andrew Bradford, Matt Porter</li>
@@ -213,7 +215,12 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 </li>
 
 </ol>
-		
+<h2 id="photos-from-tests">Photos from tests</h2>	
+<img src="pio_2MHz_img.png" alt="PIO test 2MHz" width="700" height="450"/>	
+<img src="pio_10MHz_img.png" alt="PIO test 10MHz" width="700" height="450"/>	
+<img src="pio_16MHz_img.png" alt="PIO test 16MHz" width="700" height="450"/>	
+<img src="pio_25MHz_img.png" alt="PIO test 20MHz" width="700" height="450"/>	
+
 <h2 id="am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</h2>	
 <ul>
 <li>AM335x ARM® Cortex™-A8 Microprocessors (MPUs) Technical Reference Manual:</li>
