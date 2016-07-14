@@ -253,12 +253,6 @@ int main(int argc, char *argv[])
 			printf("Can't put msg\n");
 			return -1;
 		}
-
-		ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
-		if (ret == -1) {
-			printf("Can't call mcspi enabled\n");
-			return -1;
-		}
 	}
 
 	if (read_flag) {
