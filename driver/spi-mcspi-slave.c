@@ -927,7 +927,6 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	ssize_t			ret = 0;
 	struct spi_slave	*slave;
 	unsigned long		missing;
-	u32			l;
 
 	slave = flip->private_data;
 
