@@ -16,6 +16,8 @@
 #include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmaengine.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -131,10 +133,19 @@
 #define SPISLAVE_MAJOR				154
 #define N_SPI_MINORS				32
 
+#define SPI_DMA_MODE				1
+#define SPI_PIO_MODE				0
+#define SPI_TRANSFER_MODE			SPI_PIO_MODE
+
 static						DECLARE_BITMAP(minors,
 							       N_SPI_MINORS);
 static						LIST_HEAD(device_list);
 static struct class				*spislave_class;
+
+struct spi_slave_dma {
+	struct dma_chan				*dma_tx;
+	struct dma_chan				*dma_rx;
+};
 
 struct spi_slave {
 	/*var defining device parameters*/
@@ -171,6 +182,8 @@ struct spi_slave {
 	u32					bytes_per_load;
 	u32					bits_per_word;
 	u32					buf_depth;
+
+	struct spi_slave_dma			*dma_channel;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -455,7 +468,63 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	u32					l;
 	int					ret = 0;
 
-	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
+	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
+
+	l &= ~MCSPI_XFER_AEL;
+	l &= ~MCSPI_XFER_AFL;
+
+	/*
+	 * set maximum receive and transmit byte
+	 * when mcspi generating interrupt
+	 */
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l  |= (slave->bytes_per_load - 1) << 8;
+
+	/*disable word counter*/
+	l &= ~MCSPI_XFER_WCNT;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
+
+	pr_info("%s: MCSPI_XFERLEVEL:0x%x\n", DRIVER_NAME, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_CHCONF_FFER;
+
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		l |= MCSPI_CHCONF_FFEW;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
+	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+
+	l &= ~MCSPI_MODULCTRL_FDAA;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
+
+	return ret;
+}
+
+
+static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
+{
+	int					ret = 0;
+
+	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
+
+	return ret;
+}
+
+static int mcspi_slave_setup_transfer(struct spi_slave *slave)
+{
+	int					ret = 0;
+	u32					l;
+
+
+	pr_info("%s: transfer setup\n", DRIVER_NAME);
 
 	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
 	pr_info("%s: bits_per_word:%x\n", DRIVER_NAME, slave->bits_per_word);
@@ -474,24 +543,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 			return -ENOMEM;
 	}
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
-
-	l &= ~MCSPI_XFER_AEL;
-	l &= ~MCSPI_XFER_AFL;
-
-	/*
-	 * set maximum receive and transmit byte
-	 * when mcspi generating interrupt
-	 */
-	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l  |= (slave->bytes_per_load - 1) << 8;
-
-	/*enable word counter*/
-	l &= ~MCSPI_XFER_WCNT;
-
-	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
-
-	pr_info("%s: MCSPI_XFERLEVEL:0x%x\n", DRIVER_NAME, l);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
@@ -516,29 +567,20 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l &= ~MCSPI_CHCONF_FFER;
 	l &= ~MCSPI_CHCONF_FFEW;
 
-	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_CHCONF_FFER;
-
-	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_CHCONF_FFEW;
-
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
-	l &= ~MCSPI_MODULCTRL_FDAA;
+	if (SPI_TRANSFER_MODE == SPI_DMA_MODE)
+		ret = mcspi_slave_setup_dma_transfer(slave);
+	else
+		ret = mcspi_slave_setup_pio_transfer(slave);
 
-	/*multiple word ocp access*/
-	/*l |= MCSPI_MODULCTRL_MOA;*/
-
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
-	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 
 	return ret;
 }
 
-static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
+static int mcspi_slave_clr_transfer(struct spi_slave *slave)
 {
 	int					ret = 0;
 
@@ -672,6 +714,9 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 
 	if (slave->rx != NULL)
 		kfree(slave->rx);
+
+	if (slave->dma_channel != NULL)
+		kfree(slave->dma_channel);
 
 	kfree(slave);
 }
@@ -820,6 +865,14 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
+	slave->dma_channel = kzalloc(sizeof(struct spi_slave_dma), GFP_KERNEL);
+
+	if (slave->dma_channel == NULL) {
+		ret = -ENOMEM;
+		goto disable_pm;
+	}
+
+
 	INIT_LIST_HEAD(&slave->device_entry);
 
 	minor = find_first_zero_bit(minors, N_SPI_MINORS);
@@ -964,7 +1017,7 @@ static int spislave_release(struct inode *inode, struct file *filp)
 	slave = filp->private_data;
 	filp->private_data = NULL;
 
-	mcspi_slave_clr_pio_transfer(slave);
+	mcspi_slave_clr_transfer(slave);
 
 	slave->users--;
 
@@ -1050,11 +1103,11 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SPISLAVE_SET_TRANSFER:
-		mcspi_slave_setup_pio_transfer(slave);
+		mcspi_slave_setup_transfer(slave);
 		break;
 
 	case SPISLAVE_CLR_TRANSFER:
-		mcspi_slave_clr_pio_transfer(slave);
+		mcspi_slave_clr_transfer(slave);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
