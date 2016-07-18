@@ -145,6 +145,12 @@ static struct class				*spislave_class;
 struct spi_slave_dma {
 	struct dma_chan				*dma_tx;
 	struct dma_chan				*dma_rx;
+
+	dma_addr_t				tx_dma_addr;
+	dma_addr_t				rx_dma_addr;
+
+	char					dma_rx_ch_name[14];
+	char					dma_tx_ch_name[14];
 };
 
 struct spi_slave {
@@ -668,10 +674,46 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
+static int mcspi_slave_request_dma(struct spi_slave *slave)
+{
+	int					ret = 0;
+	struct spi_slave_dma			*slave_dma;
+
+	slave_dma = &slave->dma_channel[0];
+
+	slave_dma->dma_tx = dma_request_chan(slave->dev,
+					      slave_dma->dma_tx_ch_name);
+
+	if (IS_ERR(slave_dma->dma_tx)) {
+		ret = PTR_ERR(slave_dma->dma_tx);
+		slave_dma->dma_tx = NULL;
+		goto no_dma;
+	}
+
+	slave_dma->dma_rx = dma_request_chan(slave->dev,
+					       slave_dma->dma_rx_ch_name);
+
+	if (IS_ERR(slave_dma->dma_rx)) {
+		ret = PTR_ERR(slave_dma->dma_rx);
+		slave_dma->dma_rx = NULL;
+		dma_release_channel(slave_dma->dma_tx);
+		slave_dma->dma_tx = NULL;
+	}
+
+	pr_info("%s: request dma channel is successful!!\n", DRIVER_NAME);
+
+no_dma:
+
+	return ret;
+}
+
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int					ret = 0;
 	u32					l;
+	struct spi_slave_dma			*slave_dma;
+
+	slave_dma = &slave->dma_channel[0];
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
@@ -691,6 +733,13 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
+
+		if (!slave_dma->dma_rx ||
+		    !slave_dma->dma_tx) {
+			ret = mcspi_slave_request_dma(slave);
+			if (ret < 0)
+				pr_err("%s: DMA is not avilable", DRIVER_NAME);
+		}
 
 		if (ret < 0)
 			return ret;
