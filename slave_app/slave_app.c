@@ -12,6 +12,10 @@
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
 
+#define SPI_TRM		0/*receive and transmit mode*/
+#define SPI_RM		1/*only receive mode*/
+#define SPI_TM		2/*only transmit mode*/
+
 static const char	*device = "/dev/spislave0";
 
 static uint8_t		read_flag;
@@ -27,11 +31,8 @@ static uint32_t		bytes_per_load = 4;
 static int transfer_8bit(int fd)
 {
 	int		ret = 0;
-	uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};
-
-	/*uint8_t tx[] = {'J', 'u', 's', 't', 'y', 'n', 'a', '\n', 0x00};*/
-	/*uint8_t tx[] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA};*/
-
+	/*uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};*/
+	uint8_t tx[] = {'K', 'i', 'n', 'g', 'a', ' ', '<', '3', '0'};
 	int		i;
 
 	ret = write(fd, tx, TX_ARRAY_SIZE);
@@ -44,7 +45,7 @@ static int transfer_8bit(int fd)
 	printf("Transmit:\n");
 
 	for (i = 0; i < ret; i++) {
-		printf("0x%0.2X ", tx[i]);
+		printf("0x%02X ", tx[i]);
 
 		if (i%8 == 7)
 			printf("\n");
@@ -152,10 +153,16 @@ static void print_usage(const char *prog)
 	     "  -r --read	reads the received data from device\n"
 	     "  -w --write	writes data to send\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
-	     "  -m  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
+	     "  -o  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
 	     "  -?  --help	print halp\n"
 	     "  -e  --bd	slave buffer depth\n"
-	     "  -p  --bpl	how many bytes after buf is reload\n");
+	     "  -p  --bpl	how many bytes after buf is reload\n"
+	     "							\n"
+	     "							\n"
+	     "	./slave_app --r --w				\n"
+	     "	./slave_app --r -d 1				\n"
+	     "	./slave_app --w -d 2				\n"
+	     "							\n");
 	exit(1);
 }
 
@@ -167,7 +174,7 @@ static void parse_opts(int argc, char *argv[])
 			{ "read",   no_argument,	0, 'r' },
 			{ "write",  no_argument,	0, 'w' },
 			{ "bpw",    required_argument,	0, 'b' },
-			{ "mode",   required_argument,	0, 'm' },
+			{ "mode",   required_argument,	0, '0' },
 			{ "bpl",    required_argument,  0, 'p' },
 			{ "bd",	    required_argument,  0, 'e' },
 			{ "help",   no_argument,	0, '?' },
@@ -175,7 +182,7 @@ static void parse_opts(int argc, char *argv[])
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:r:w:b:m:p:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:r:w:b:o:p:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -196,7 +203,7 @@ static void parse_opts(int argc, char *argv[])
 		case 'p':
 			bytes_per_load = atoi(optarg);
 			break;
-		case 'm':
+		case 'o':
 			mode = atoi(optarg);
 			break;
 		case 'e':
@@ -235,7 +242,7 @@ int main(int argc, char *argv[])
 
 	print_setting();
 
-	if (write_flag) {
+	if (write_flag && mode == SPI_TRM) {
 		ret = put_setting(pollfds.fd);
 		if (ret == -1) {
 			printf("Can't put setting!!\n");
@@ -255,7 +262,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (read_flag) {
+	if (read_flag && mode == SPI_TRM) {
 		while (1) {
 			ret = poll(&pollfds, 1, timeout);
 
@@ -286,6 +293,92 @@ int main(int argc, char *argv[])
 		if (ret == -1) {
 			printf("Can't call clr transfer\n");
 			return -1;
+		}
+	}
+
+	if (read_flag && mode == SPI_RM) {
+		ret = put_setting(pollfds.fd);
+		if (ret == -1) {
+			printf("Can't put setting!!\n");
+			return -1;
+		}
+
+		ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
+		if (ret == -1) {
+			printf("Cant't call set transfer\n");
+			return -1;
+		}
+
+		while (1) {
+			ret = poll(&pollfds, 1, timeout);
+
+			switch (ret) {
+			case 0:
+				printf("timeout\n");
+				break;
+
+			case -1:
+				printf("poll error\n");
+				exit(1);
+
+			default:
+				if (pollfds.revents & POLLIN) {
+					ret = read_8bit(pollfds.fd);
+
+					if (ret < 0) {
+						printf("Failed to reads!\n");
+						return -1;
+					}
+					exit(0);
+				}
+				break;
+			}
+		}
+	}
+
+
+	if (write_flag && mode == SPI_TM) {
+		ret = put_setting(pollfds.fd);
+		if (ret == -1) {
+			printf("Can't put setting!!\n");
+			return -1;
+		}
+
+		ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
+		if (ret == -1) {
+			printf("Cant't call set transfer\n");
+			return -1;
+		}
+
+		ret = transfer_8bit(pollfds.fd);
+		if (ret == -1) {
+			printf("Can't put msg\n");
+			return -1;
+		}
+		while (1) {
+			ret = poll(&pollfds, 1, timeout);
+
+			switch (ret) {
+			case 0:
+				printf("timeout\n");
+				break;
+
+			case -1:
+				printf("poll error\n");
+				exit(1);
+
+			default:
+				if (pollfds.revents & POLLIN) {
+					printf("Transmit successful!\n");
+
+					if (ret < 0) {
+						printf("Failed to reads!\n");
+						return -1;
+					}
+					exit(0);
+				}
+				break;
+			}
 		}
 	}
 

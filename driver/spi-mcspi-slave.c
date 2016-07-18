@@ -35,13 +35,13 @@
 #define MCSPI_MODE_RM				1
 #define MCSPI_MODE_TM				2
 
-#define SPI_MCSPI_SLAVE_BUF_DEPTH		64
-#define SPI_MCSPI_SLAVE_BITS_PER_WORD		8
-#define SPI_MCSPI_SLAVE_CS_SENSITIVE		MCSPI_CS_SENSITIVE_ENABLED
-#define SPI_MCSPI_SLAVE_CS_POLARITY		MCSPI_CS_POLARITY_ACTIVE_LOW
-#define SPI_MCSPI_SLAVE_PIN_DIR			MCSPI_PIN_DIR_D0_IN_D1_OUT
-#define SPI_MCSPI_SLAVE_MODE			MCSPI_MODE_TRM
-#define SPI_MCSPI_SLAVE_COPY_LENGTH		1
+#define SPI_SLAVE_BUF_DEPTH			64
+#define SPI_SLAVE_BITS_PER_WORD			8
+#define SPII_SLAVE_CS_SENSITIVE			MCSPI_CS_SENSITIVE_ENABLED
+#define SPI_SLAVE_CS_POLARITY			MCSPI_CS_POLARITY_ACTIVE_LOW
+#define SPI_SLAVE_PIN_DIR			MCSPI_PIN_DIR_D0_IN_D1_OUT
+#define SPI_SLAVE_MODE				MCSPI_MODE_TRM
+#define SPI_SLAVE_COPY_LENGTH			1
 
 #define MCSPI_SYSCONFIG				0x10
 #define MCSPI_SYSSTATUS				0x14
@@ -131,45 +131,46 @@
 #define SPISLAVE_MAJOR				154
 #define N_SPI_MINORS				32
 
-static					DECLARE_BITMAP(minors, N_SPI_MINORS);
-static					LIST_HEAD(device_list);
-static struct class			*spislave_class;
+static						DECLARE_BITMAP(minors,
+							       N_SPI_MINORS);
+static						LIST_HEAD(device_list);
+static struct class				*spislave_class;
 
 struct spi_slave {
 	/*var defining device parameters*/
-	struct	device			*dev;
-	void	__iomem			*base;
-	u32				start;
-	u32				end;
-	unsigned int			reg_offset;
-	s16				bus_num;
+	struct	device				*dev;
+	void	__iomem				*base;
+	u32					start;
+	u32					end;
+	unsigned int				reg_offset;
+	s16					bus_num;
 
 	/*var defining cs and pin direct parameters*/
-	unsigned int			pin_dir;
-	u32				cs_sensitive;
-	u32				cs_polarity;
+	unsigned int				pin_dir;
+	u32					cs_sensitive;
+	u32					cs_polarity;
 
 	/*var defining interrupt*/
-	unsigned int			irq;
+	unsigned int				irq;
 
 	/*var defining msg */
-	u32				tx_offset;
-	u32				rx_offset;
-	void  __iomem			*tx;
-	void  __iomem			*rx;
+	u32					tx_offset;
+	u32					rx_offset;
+	void  __iomem				*tx;
+	void  __iomem				*rx;
 
 	/*var defining the char driver parameters*/
-	char				modalias[SPI_NAME_SIZE];
-	dev_t				devt;
-	struct	list_head		device_entry;
-	unsigned int			users;
-	wait_queue_head_t		wait;
+	char					modalias[SPI_NAME_SIZE];
+	dev_t					devt;
+	struct	list_head			device_entry;
+	unsigned int				users;
+	wait_queue_head_t			wait;
 
 	/*var defining the transfer parameters*/
-	u32				mode;
-	u32				bytes_per_load;
-	u32				bits_per_word;
-	u32				buf_depth;
+	u32					mode;
+	u32					bytes_per_load;
+	u32					bits_per_word;
+	u32					buf_depth;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -195,7 +196,7 @@ static inline int mcspi_slave_bytes_per_word(int word_len)
 
 static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 {
-	unsigned long timeout;
+	unsigned long				timeout;
 
 	timeout = jiffies + msecs_to_jiffies(1000);
 	while (!(ioread32(reg) & bit)) {
@@ -213,7 +214,7 @@ static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 
 static void mcspi_slave_enable(struct spi_slave *slave)
 {
-	u32		l;
+	u32					l;
 
 	pr_info("%s: spi is enabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
@@ -227,7 +228,7 @@ static void mcspi_slave_enable(struct spi_slave *slave)
 
 static void mcspi_slave_disable(struct spi_slave *slave)
 {
-	u32		l;
+	u32					l;
 
 	pr_info("%s: spi is disabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
@@ -241,10 +242,12 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 
 static void mcspi_slave_pio_rx_transfer(unsigned long data)
 {
-	struct spi_slave		*slave = (struct spi_slave *) data;
-	unsigned int			c;
-	void __iomem			*rx_reg;
-	void __iomem			*chstat;
+	struct spi_slave			*slave;
+	unsigned int				c;
+	void __iomem				*rx_reg;
+	void __iomem				*chstat;
+
+	slave = (struct spi_slave *) data;
 
 	rx_reg = slave->base + MCSPI_RX0;
 	chstat = slave->base + MCSPI_CH0STAT;
@@ -315,14 +318,18 @@ DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave,
 					unsigned int length)
 {
-	unsigned int			c;
-	void __iomem			*tx_reg;
-	void __iomem			*chstat;
+	unsigned int				c;
+	void __iomem				*tx_reg;
+	void __iomem				*chstat;
 
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
 
-	c = 32;
+	if (slave->mode == MCSPI_MODE_TM)
+		c = MCSPI_MAX_FIFO_DEPTH;
+	else
+		c = MCSPI_MAX_FIFO_DEPTH / 2;
+
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (slave->tx_offset >= slave->buf_depth) {
@@ -385,8 +392,8 @@ out:
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
-	struct spi_slave	*slave = dev_id;
-	u32			l;
+	struct spi_slave			*slave = dev_id;
+	u32					l;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
 
@@ -413,8 +420,8 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 
 static int mcspi_slave_set_irq(struct spi_slave *slave)
 {
-	u32		l;
-	int		ret = 0;
+	u32					l;
+	int					ret = 0;
 
 	pr_info("%s: set interrupt\n", DRIVER_NAME);
 
@@ -423,8 +430,8 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 	l &= ~MCSPI_IRQ_RX_FULL;
 	l &= ~MCSPI_IRQ_TX_EMPTY;
 
-	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_IRQ_RX_FULL;
+
+	l |= MCSPI_IRQ_RX_FULL;
 
 	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
@@ -445,8 +452,8 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
-	u32				l;
-	int				ret = 0;
+	u32					l;
+	int					ret = 0;
 
 	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
 
@@ -533,7 +540,7 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 {
-	int		ret = 0;
+	int					ret = 0;
 
 	pr_info("%s: clear transfer", DRIVER_NAME);
 
@@ -550,7 +557,7 @@ static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 
 static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 {
-	u32		l;
+	u32					l;
 
 	pr_info("%s: set slave mode\n", DRIVER_NAME);
 
@@ -585,7 +592,7 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 
 static void mcspi_slave_set_cs(struct spi_slave *slave)
 {
-	u32		l;
+	u32					l;
 
 	pr_info("%s: set cs sensitive and polarity\n", DRIVER_NAME);
 
@@ -619,15 +626,10 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
-static void mcspi_slave_setup_system(struct spi_slave *slave)
-{
-
-}
-
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
-	int		ret = 0;
-	u32		l;
+	int					ret = 0;
+	u32					l;
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
@@ -644,14 +646,10 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 		/*here set mcspi controller in slave mode and more setting*/
 		mcspi_slave_disable(slave);
-		mcspi_slave_setup_system(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
-	       /*
-		*mcspi_slave_setup_pio_transfer(slave);
-		*mcspi_slave_enable(slave);
-		*/
+
 		if (ret < 0)
 			return ret;
 
@@ -794,10 +792,10 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->irq			= irq;
 
 	/*default setting when user dosn't get your setting*/
-	slave->mode			= SPI_MCSPI_SLAVE_MODE;
-	slave->buf_depth		= SPI_MCSPI_SLAVE_BUF_DEPTH;
-	slave->bytes_per_load		= SPI_MCSPI_SLAVE_COPY_LENGTH;
-	slave->bits_per_word		= SPI_MCSPI_SLAVE_BITS_PER_WORD;
+	slave->mode			= SPI_SLAVE_MODE;
+	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
+	slave->bytes_per_load		= SPI_SLAVE_COPY_LENGTH;
+	slave->bits_per_word		= SPI_SLAVE_BITS_PER_WORD;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -866,7 +864,7 @@ free_slave:
 
 static int mcspi_slave_remove(struct platform_device *pdev)
 {
-	struct spi_slave	*slave;
+	struct spi_slave			*slave;
 
 	slave = platform_get_drvdata(pdev);
 
@@ -884,8 +882,8 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 }
 
 static struct platform_driver mcspi_slave_driver = {
-	.probe =	mcspi_slave_probe,
-	.remove =	mcspi_slave_remove,
+	.probe	= mcspi_slave_probe,
+	.remove = mcspi_slave_remove,
 	.driver = {
 		.name =	DRIVER_NAME,
 		.of_match_table = of_match_ptr(mcspi_slave_of_match),
@@ -895,8 +893,8 @@ static struct platform_driver mcspi_slave_driver = {
 static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
-	struct spi_slave	*slave;
-	int			error_count = 0;
+	struct spi_slave			*slave;
+	int					error_count = 0;
 
 	slave = flip->private_data;
 	pr_info("%s: read begin\n", DRIVER_NAME);
@@ -924,10 +922,9 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 static ssize_t spislave_write(struct file *flip, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
-	ssize_t			ret = 0;
-	struct spi_slave	*slave;
-	unsigned long		missing;
-	u32			l;
+	ssize_t					ret = 0;
+	struct spi_slave			*slave;
+	unsigned long				missing;
 
 	slave = flip->private_data;
 
@@ -961,11 +958,13 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	int			ret = 0;
-	struct spi_slave	*slave;
+	int					ret = 0;
+	struct spi_slave			*slave;
 
 	slave = filp->private_data;
 	filp->private_data = NULL;
+
+	mcspi_slave_clr_pio_transfer(slave);
 
 	slave->users--;
 
@@ -975,8 +974,8 @@ static int spislave_release(struct inode *inode, struct file *filp)
 
 static int spislave_open(struct inode *inode, struct file *filp)
 {
-	int			ret = -ENXIO;
-	struct spi_slave	*slave;
+	int					ret = -ENXIO;
+	struct spi_slave			*slave;
 
 	list_for_each_entry(slave, &device_list, device_entry) {
 		if (slave->devt == inode->i_rdev) {
@@ -997,9 +996,9 @@ static int spislave_open(struct inode *inode, struct file *filp)
 static long spislave_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	int			ret = 0;
-	int			err = 0;
-	struct spi_slave	*slave;
+	int					ret = 0;
+	int					err = 0;
+	struct spi_slave			*slave;
 
 	if (_IOC_TYPE(cmd) != SPISLAVE_IOC_MAGIC)
 		return -ENOTTY;
@@ -1084,8 +1083,8 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 static unsigned int spislave_event_poll(struct file *filp,
 					struct poll_table_struct *wait)
 {
-	struct spi_slave *slave;
-	unsigned int events = 0;
+	struct spi_slave			*slave;
+	unsigned int				events = 0;
 
 	slave = filp->private_data;
 
@@ -1115,7 +1114,7 @@ static const struct file_operations spislave_fops = {
 
 static int __init mcspi_slave_init(void)
 {
-	int		ret = 0;
+	int					ret = 0;
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
