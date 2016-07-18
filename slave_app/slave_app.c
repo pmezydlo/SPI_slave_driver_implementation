@@ -157,12 +157,12 @@ static void print_usage(const char *prog)
 	     "  -?  --help	print halp\n"
 	     "  -e  --bd	slave buffer depth\n"
 	     "  -p  --bpl	how many bytes after buf is reload\n"
-	     "							\n"
-	     "							\n"
-	     "	./slave_app --r --w				\n"
-	     "	./slave_app --r -d 1				\n"
-	     "	./slave_app --w -d 2				\n"
-	     "							\n");
+	     "\n"
+	     "\n"
+	     "	./slave_app --r --w\n"
+	     "	./slave_app --r -d 1\n"
+	     "	./slave_app --w -d 2\n"
+	     "\n");
 	exit(1);
 }
 
