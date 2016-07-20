@@ -135,7 +135,7 @@
 
 #define SPI_DMA_MODE				1
 #define SPI_PIO_MODE				0
-#define SPI_TRANSFER_MODE			SPI_PIO_MODE
+#define SPI_TRANSFER_MODE			SPI_DMA_MODE
 
 static						DECLARE_BITMAP(minors,
 							       N_SPI_MINORS);
@@ -145,12 +145,6 @@ static struct class				*spislave_class;
 struct spi_slave_dma {
 	struct dma_chan				*dma_tx;
 	struct dma_chan				*dma_rx;
-
-	dma_addr_t				tx_dma_addr;
-	dma_addr_t				rx_dma_addr;
-
-	char					dma_rx_ch_name[14];
-	char					dma_tx_ch_name[14];
 };
 
 struct spi_slave {
@@ -189,7 +183,7 @@ struct spi_slave {
 	u32					bits_per_word;
 	u32					buf_depth;
 
-	struct spi_slave_dma			*dma_channel;
+	struct spi_slave_dma			dma_channel;
 };
 
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
@@ -677,27 +671,27 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 static int mcspi_slave_request_dma(struct spi_slave *slave)
 {
 	int					ret = 0;
-	struct spi_slave_dma			*slave_dma;
 
-	slave_dma = &slave->dma_channel[0];
+	pr_info("%s: request dma\n", DRIVER_NAME);
 
-	slave_dma->dma_tx = dma_request_chan(slave->dev,
-					      slave_dma->dma_tx_ch_name);
+	slave->dma_channel.dma_tx = dma_request_chan(slave->dev, "tx");
 
-	if (IS_ERR(slave_dma->dma_tx)) {
-		ret = PTR_ERR(slave_dma->dma_tx);
-		slave_dma->dma_tx = NULL;
+	if (IS_ERR(slave->dma_channel.dma_tx)) {
+		pr_err("%s: DMA tx is not available!!\n", DRIVER_NAME);
+		ret = PTR_ERR(slave->dma_channel.dma_tx);
+		slave->dma_channel.dma_tx = NULL;
 		goto no_dma;
 	}
 
-	slave_dma->dma_rx = dma_request_chan(slave->dev,
-					       slave_dma->dma_rx_ch_name);
+	slave->dma_channel.dma_rx = dma_request_chan(slave->dev, "rx");
 
-	if (IS_ERR(slave_dma->dma_rx)) {
-		ret = PTR_ERR(slave_dma->dma_rx);
-		slave_dma->dma_rx = NULL;
-		dma_release_channel(slave_dma->dma_tx);
-		slave_dma->dma_tx = NULL;
+	if (IS_ERR(slave->dma_channel.dma_rx)) {
+		pr_err("%s: DMA rx is not available!!\n", DRIVER_NAME);
+
+		ret = PTR_ERR(slave->dma_channel.dma_rx);
+		slave->dma_channel.dma_rx = NULL;
+		dma_release_channel(slave->dma_channel.dma_tx);
+		slave->dma_channel.dma_tx = NULL;
 	}
 
 	pr_info("%s: request dma channel is successful!!\n", DRIVER_NAME);
@@ -711,9 +705,6 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int					ret = 0;
 	u32					l;
-	struct spi_slave_dma			*slave_dma;
-
-	slave_dma = &slave->dma_channel[0];
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
@@ -734,8 +725,8 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
 
-		if (!slave_dma->dma_rx ||
-		    !slave_dma->dma_tx) {
+		if (slave->dma_channel.dma_rx == NULL ||
+		    slave->dma_channel.dma_tx == NULL) {
 			ret = mcspi_slave_request_dma(slave);
 			if (ret < 0)
 				pr_err("%s: DMA is not avilable", DRIVER_NAME);
@@ -763,9 +754,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 
 	if (slave->rx != NULL)
 		kfree(slave->rx);
-
-	if (slave->dma_channel != NULL)
-		kfree(slave->dma_channel);
 
 	kfree(slave);
 }
@@ -913,14 +901,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	ret = mcspi_slave_setup(slave);
 	if (ret < 0)
 		goto disable_pm;
-
-	slave->dma_channel = kzalloc(sizeof(struct spi_slave_dma), GFP_KERNEL);
-
-	if (slave->dma_channel == NULL) {
-		ret = -ENOMEM;
-		goto disable_pm;
-	}
-
 
 	INIT_LIST_HEAD(&slave->device_entry);
 
