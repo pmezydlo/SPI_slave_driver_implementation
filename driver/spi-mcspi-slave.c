@@ -18,6 +18,7 @@
 #include <linux/sched.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmaengine.h>
+#include <linux/omap-dma.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -145,7 +146,12 @@ static struct class				*spislave_class;
 struct spi_slave_dma {
 	struct dma_chan				*dma_tx;
 	struct dma_chan				*dma_rx;
+
+	int					dma_tx_sync_dev;
+	int					dma_rx_sync_dev;
 };
+
+#define DMA_MIN_BYTES				33
 
 struct spi_slave {
 	/*var defining device parameters*/
@@ -670,35 +676,38 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 
 static int mcspi_slave_request_dma(struct spi_slave *slave)
 {
-	int					ret = 0;
+	dma_cap_mask_t				mask;
+	unsigned				sig;
 
 	pr_info("%s: request dma\n", DRIVER_NAME);
 
-	slave->dma_channel.dma_tx = dma_request_chan(slave->dev, "tx");
+	dma_cap_zero(mask);
+	dma_cap_set(DMA_SLAVE, mask);
 
-	if (IS_ERR(slave->dma_channel.dma_tx)) {
-		pr_err("%s: DMA tx is not available!!\n", DRIVER_NAME);
-		ret = PTR_ERR(slave->dma_channel.dma_tx);
-		slave->dma_channel.dma_tx = NULL;
+	sig = slave->dma_channel.dma_rx_sync_dev;
+	slave->dma_channel.dma_rx = dma_request_slave_channel_compat(mask,
+				    omap_dma_filter_fn, &sig, slave->dev,
+				    "rx0");
+
+	if (slave->dma_channel.dma_rx == NULL)
+		goto no_dma;
+
+	sig = slave->dma_channel.dma_tx_sync_dev;
+	slave->dma_channel.dma_tx = dma_request_slave_channel_compat(mask,
+				    omap_dma_filter_fn, &sig, slave->dev,
+				    "tx0");
+
+	if (slave->dma_channel.dma_tx == NULL) {
+		dma_release_channel(slave->dma_channel.dma_rx);
+		slave->dma_channel.dma_rx = NULL;
 		goto no_dma;
 	}
 
-	slave->dma_channel.dma_rx = dma_request_chan(slave->dev, "rx");
-
-	if (IS_ERR(slave->dma_channel.dma_rx)) {
-		pr_err("%s: DMA rx is not available!!\n", DRIVER_NAME);
-
-		ret = PTR_ERR(slave->dma_channel.dma_rx);
-		slave->dma_channel.dma_rx = NULL;
-		dma_release_channel(slave->dma_channel.dma_tx);
-		slave->dma_channel.dma_tx = NULL;
-	}
-
-	pr_info("%s: request dma channel is successful!!\n", DRIVER_NAME);
+	return 0;
 
 no_dma:
-
-	return ret;
+	pr_err("%s: not using DMA!!!\n", DRIVER_NAME);
+	return -EAGAIN;
 }
 
 static int mcspi_slave_setup(struct spi_slave *slave)
@@ -725,15 +734,17 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
 
+
 		if (slave->dma_channel.dma_rx == NULL ||
 		    slave->dma_channel.dma_tx == NULL) {
 			ret = mcspi_slave_request_dma(slave);
-			if (ret < 0)
-				pr_err("%s: DMA is not avilable", DRIVER_NAME);
-		}
 
-		if (ret < 0)
-			return ret;
+			if (ret < 0 && ret != -EAGAIN) {
+				pr_err("%s: DMA is not avilable", DRIVER_NAME);
+				return ret;
+
+			}
+		}
 
 	} else {
 		pr_err("%s: internal module reset is on-going\n",
@@ -794,6 +805,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	static int					bus_num;
 
 	unsigned long					minor;
+
+	struct resource					*dma_res;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -889,6 +902,31 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
+
+
+	if (!pdev->dev.of_node) {
+		dma_res = platform_get_resource_byname(pdev,
+						       IORESOURCE_DMA, "rx0");
+
+		if (!dma_res) {
+			pr_err("%s: cannot get DMA RX channel\n", DRIVER_NAME);
+			ret = -ENODEV;
+			goto free_slave;
+		}
+
+		slave->dma_channel.dma_rx_sync_dev = dma_res->start;
+
+		dma_res = platform_get_resource_byname(pdev,
+						       IORESOURCE_DMA, "tx0");
+
+		if (!dma_res) {
+			pr_err("%s: cannot get DMA TX channel\n", DRIVER_NAME);
+			ret = -ENODEV;
+			goto free_slave;
+		}
+
+		slave->dma_channel.dma_tx_sync_dev = dma_res->start;
+	}
 
 	pm_runtime_use_autosuspend(slave->dev);
 	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
