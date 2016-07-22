@@ -766,6 +766,18 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	if (slave->rx != NULL)
 		kfree(slave->rx);
 
+	if (slave->dma_channel.dma_tx) {
+		dma_release_channel(slave->dma_channel.dma_tx);
+		slave->dma_channel.dma_tx = NULL;
+	}
+
+	if (slave->dma_channel.dma_rx) {
+		dma_release_channel(slave->dma_channel.dma_rx);
+		slave->dma_channel.dma_rx = NULL;
+	}
+
+
+
 	kfree(slave);
 }
 
