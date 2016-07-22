@@ -99,6 +99,8 @@
 #define MCSPI_CHCONF_DPE1			BIT(17)
 #define MCSPI_CHCONF_POL			BIT(1)
 #define MCSPI_CHCONF_PHA			BIT(0)
+#define MCSPI_CHCONF_DMAW			BIT(14)
+#define MCSPI_CHCONF_DMAR			BIT(15)
 
 #define MCSPI_IRQ_RX_OVERFLOW			BIT(3)
 #define MCSPI_IRQ_RX_FULL			BIT(2)
@@ -514,6 +516,23 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
+static void mcspi_slave_tx_callback(void *data)
+{
+	struct spi_slave			*slave;
+
+	slave = (struct spi_slave *) data;
+
+
+}
+
+static void mcspi_slave_rx_callback(void *data)
+{
+	struct spi_slave			*slave;
+
+	slave = (struct spi_slave *) data;
+
+
+}
 
 static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 {
