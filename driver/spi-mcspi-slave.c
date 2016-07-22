@@ -30,6 +30,10 @@
 #define MCSPI_CS_SENSITIVE_ENABLED		1
 #define MCSPI_CS_SENSITIVE_DISABLED		0
 #define MCSPI_MAX_FIFO_DEPTH			64
+#define MCSPI_POL_HELD_HIGH			0
+#define MCSPI_POL_HELD_LOW			1
+#define MCSPI_PHA_ODD_NUMBERED_EDGES		0
+#define MCSPI_PHA_EVEN_NUMBERED_EDGES		1
 
 #define MCSPI_MODE_TRM				0
 #define MCSPI_MODE_RM				1
@@ -149,6 +153,8 @@ struct spi_slave {
 	unsigned int				pin_dir;
 	u32					cs_sensitive;
 	u32					cs_polarity;
+	unsigned int				pha;
+	unsigned int				pol;
 
 	/*var defining interrupt*/
 	unsigned int				irq;
@@ -586,6 +592,16 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 		l &= ~MCSPI_CHCONF_DPE0;
 	}
 
+	if (slave->pol == MCSPI_POL_HELD_HIGH)
+		l &= ~MCSPI_CHCONF_POL;
+	else
+		l |= MCSPI_CHCONF_POL;
+
+	if (slave->pha == MCSPI_PHA_ODD_NUMBERED_EDGES)
+		l &= ~MCSPI_CHCONF_PHA;
+	else
+		l |= MCSPI_CHCONF_PHA;
+
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
@@ -710,6 +726,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pin_dir;
 	unsigned int					irq;
 	static int					bus_num;
+	unsigned int					pha;
+	unsigned int					pol;
 
 	unsigned long					minor;
 
@@ -742,6 +760,17 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
 		else
 			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
+
+		if (of_get_property(node, "pha", &pha))
+			pha = MCSPI_PHA_EVEN_NUMBERED_EDGES;
+		else
+			pha = MCSPI_PHA_ODD_NUMBERED_EDGES;
+
+		if (of_get_property(node, "pol", &pol))
+			pol = MCSPI_POL_HELD_LOW;
+		else
+			pol = MCSPI_POL_HELD_HIGH;
+
 
 		irq = irq_of_parse_and_map(node, 0);
 
@@ -790,7 +819,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->cs_sensitive		= cs_sensitive;
 	slave->pin_dir			= pin_dir;
 	slave->irq			= irq;
-
+	slave->pol			= pol;
+	slave->pha			= pha;
 	/*default setting when user dosn't get your setting*/
 	slave->mode			= SPI_SLAVE_MODE;
 	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
@@ -807,6 +837,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
+	pr_info("%s: pol=%d\n", DRIVER_NAME, slave->pol);
+	pr_info("%s: pha=%d\n", DRIVER_NAME, slave->pha);
 
 	pm_runtime_use_autosuspend(slave->dev);
 	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
