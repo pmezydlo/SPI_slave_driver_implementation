@@ -516,6 +516,36 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
+static void mcspi_slave_dma_request_enable(struct spi_slave *slave,
+					   unsigned int rw)
+{
+	u32					l;
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
+	if (rw) /*1 is read, 0 write*/
+		l |= MCSPI_CHCONF_DMAR;
+	else
+		l |= MCSPI_CHCONF_DMAW;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
+}
+
+static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
+					    unsigned int rw)
+{
+	u32					l;
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+
+	if (rw)
+		l &= ~MCSPI_CHCONF_DMAR;
+	else
+		l |= MCSPI_CHCONF_DMAW;
+
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
+}
+
 static void mcspi_slave_tx_callback(void *data)
 {
 	struct spi_slave			*slave;
