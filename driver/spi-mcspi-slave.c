@@ -516,21 +516,21 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
-static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
+static void mcspi_slave_dma_tx_callback(void *data)
 {
-	int					ret;
-	struct spi_slave_dma			*dma_channel;
+	struct spi_slave			*slave;
 
-	dma_channel = &slave->dma_channel;
+	slave = (struct spi_slave *) data;
+
 
 }
 
-static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
+static void mcspi_slave_dma_rx_callback(void *data)
 {
-	int					ret;
-	struct spi_slave_dma			*dma_channel;
+	struct spi_slave			*slave;
 
-	dma_channel = &slave->dma_channel;
+	slave = (struct spi_slave *) data;
+
 
 }
 
@@ -564,21 +564,22 @@ static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
 
-static void mcspi_slave_dma_tx_callback(void *data)
+static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave,
+					struct dma_slave_config config)
+
 {
-	struct spi_slave			*slave;
+	struct spi_slave_dma			*dma_channel;
 
-	slave = (struct spi_slave *) data;
-
+	dma_channel = &slave->dma_channel;
 
 }
 
-static void mcspi_slave_dma_rx_callback(void *data)
+static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave,
+					struct dma_slave_config config)
 {
-	struct spi_slave			*slave;
+	struct spi_slave_dma			*dma_channel;
 
-	slave = (struct spi_slave *) data;
-
+	dma_channel = &slave->dma_channel;
 
 }
 
@@ -589,6 +590,7 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	struct dma_slave_config			config;
 	enum dma_slave_buswidth			width;
 	unsigned int				bpw;
+	u32					burst;
 
 	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
 
@@ -603,6 +605,23 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	else
 		width = DMA_SLAVE_BUSWIDTH_4_BYTES;
 
+	/*set fifo but without fifo burst = 1*/
+	/*I will add later fifo connection with dma*/
+	burst = 1;
+
+	config.src_addr = (phys_addr_t)(slave->base + MCSPI_RX0);
+	config.dst_addr = (phys_addr_t)(slave->base + MCSPI_TX0);
+	config.src_addr_width = width;
+	config.dst_addr_width = width;
+	config.src_maxburst = burst;
+	config.dst_maxburst = burst;
+
+
+	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		mcspi_slave_dma_tx_transfer(slave, config);
+
+	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
+		mcspi_slave_dma_rx_transfer(slave, config);
 
 	return ret;
 }
