@@ -516,6 +516,24 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
+static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
+{
+	int					ret;
+	struct spi_slave_dma			*dma_channel;
+
+	dma_channel = &slave->dma_channel;
+
+}
+
+static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
+{
+	int					ret;
+	struct spi_slave_dma			*dma_channel;
+
+	dma_channel = &slave->dma_channel;
+
+}
+
 static void mcspi_slave_dma_request_enable(struct spi_slave *slave,
 					   unsigned int rw)
 {
@@ -546,7 +564,7 @@ static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
 
-static void mcspi_slave_tx_callback(void *data)
+static void mcspi_slave_dma_tx_callback(void *data)
 {
 	struct spi_slave			*slave;
 
@@ -555,7 +573,7 @@ static void mcspi_slave_tx_callback(void *data)
 
 }
 
-static void mcspi_slave_rx_callback(void *data)
+static void mcspi_slave_dma_rx_callback(void *data)
 {
 	struct spi_slave			*slave;
 
@@ -567,8 +585,24 @@ static void mcspi_slave_rx_callback(void *data)
 static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 {
 	int					ret = 0;
+	struct spi_slave_dma			*dma_channel;
+	struct dma_slave_config			config;
+	enum dma_slave_buswidth			width;
+	unsigned int				bpw;
 
 	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
+
+	dma_channel = &slave->dma_channel;
+
+	bpw = mcspi_slave_bytes_per_word(slave->bits_per_word);
+
+	if (bpw == 1)
+		width = DMA_SLAVE_BUSWIDTH_1_BYTE;
+	else if (bpw == 2)
+		width = DMA_SLAVE_BUSWIDTH_2_BYTES;
+	else
+		width = DMA_SLAVE_BUSWIDTH_4_BYTES;
+
 
 	return ret;
 }
@@ -577,7 +611,6 @@ static int mcspi_slave_setup_transfer(struct spi_slave *slave)
 {
 	int					ret = 0;
 	u32					l;
-
 
 	pr_info("%s: transfer setup\n", DRIVER_NAME);
 
@@ -727,6 +760,9 @@ static int mcspi_slave_request_dma(struct spi_slave *slave)
 {
 	dma_cap_mask_t				mask;
 	unsigned				sig;
+	struct spi_slave_dma			*dma_channel;
+
+	dma_channel = &slave->dma_channel;
 
 	pr_info("%s: request dma\n", DRIVER_NAME);
 
@@ -738,17 +774,17 @@ static int mcspi_slave_request_dma(struct spi_slave *slave)
 				    omap_dma_filter_fn, &sig, slave->dev,
 				    "rx0");
 
-	if (slave->dma_channel.dma_rx == NULL)
+	if (dma_channel->dma_rx == NULL)
 		goto no_dma;
 
-	sig = slave->dma_channel.dma_tx_sync_dev;
-	slave->dma_channel.dma_tx = dma_request_slave_channel_compat(mask,
-				    omap_dma_filter_fn, &sig, slave->dev,
-				    "tx0");
+	sig = dma_channel->dma_tx_sync_dev;
+	dma_channel->dma_tx = dma_request_slave_channel_compat(mask,
+			      omap_dma_filter_fn, &sig, slave->dev,
+			      "tx0");
 
-	if (slave->dma_channel.dma_tx == NULL) {
-		dma_release_channel(slave->dma_channel.dma_rx);
-		slave->dma_channel.dma_rx = NULL;
+	if (dma_channel->dma_tx == NULL) {
+		dma_release_channel(dma_channel->dma_rx);
+		dma_channel->dma_rx = NULL;
 		goto no_dma;
 	}
 
