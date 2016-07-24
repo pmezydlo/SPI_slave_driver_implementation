@@ -151,6 +151,8 @@ struct spi_slave_dma {
 
 	int					dma_tx_sync_dev;
 	int					dma_rx_sync_dev;
+
+	struct dma_slave_config			config;
 };
 
 #define DMA_MIN_BYTES				33
@@ -516,24 +518,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	return ret;
 }
 
-static void mcspi_slave_dma_tx_callback(void *data)
-{
-	struct spi_slave			*slave;
-
-	slave = (struct spi_slave *) data;
-
-
-}
-
-static void mcspi_slave_dma_rx_callback(void *data)
-{
-	struct spi_slave			*slave;
-
-	slave = (struct spi_slave *) data;
-
-
-}
-
 static void mcspi_slave_dma_request_enable(struct spi_slave *slave,
 					   unsigned int rw)
 {
@@ -559,35 +543,64 @@ static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
 	if (rw)
 		l &= ~MCSPI_CHCONF_DMAR;
 	else
-		l |= MCSPI_CHCONF_DMAW;
+		l &= ~MCSPI_CHCONF_DMAW;
 
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
 
-static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave,
-					struct dma_slave_config config)
-
+static void mcspi_slave_dma_tx_callback(void *data)
 {
-	struct spi_slave_dma			*dma_channel;
+	struct spi_slave			*slave;
 
-	dma_channel = &slave->dma_channel;
+	slave = (struct spi_slave *) data;
 
+	pr_info("%s: end of DMA tx transfer\n", DRIVER_NAME);
+
+	mcspi_slave_dma_request_disable(slave, 0);
 }
 
-static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave,
-					struct dma_slave_config config)
+static void mcspi_slave_dma_rx_callback(void *data)
+{
+	struct spi_slave			*slave;
+
+	slave = (struct spi_slave *) data;
+
+	pr_info("%s: end of DMA rx transfer\n", DRIVER_NAME);
+
+	mcspi_slave_dma_request_disable(slave, 1);
+}
+
+static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 {
 	struct spi_slave_dma			*dma_channel;
+	struct dma_slave_config			*config;
 
 	dma_channel = &slave->dma_channel;
+	config = &dma_channel->config;
 
+	pr_info("%s: tx dma transfer\n", DRIVER_NAME);
+
+	mcspi_slave_dma_request_enable(slave, 0);
+}
+
+static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
+{
+	struct spi_slave_dma			*dma_channel;
+	struct dma_slave_config			*config;
+
+	dma_channel = &slave->dma_channel;
+	config = &dma_channel->config;
+
+	pr_info("%s: rx dma transfer\n", DRIVER_NAME);
+
+	mcspi_slave_dma_request_enable(slave, 1);
 }
 
 static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 {
 	int					ret = 0;
 	struct spi_slave_dma			*dma_channel;
-	struct dma_slave_config			config;
+	struct dma_slave_config			*config;
 	enum dma_slave_buswidth			width;
 	unsigned int				bpw;
 	u32					burst;
@@ -595,6 +608,7 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
 
 	dma_channel = &slave->dma_channel;
+	config = &dma_channel->config;
 
 	bpw = mcspi_slave_bytes_per_word(slave->bits_per_word);
 
@@ -609,19 +623,15 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	/*I will add later fifo connection with dma*/
 	burst = 1;
 
-	config.src_addr = (phys_addr_t)(slave->base + MCSPI_RX0);
-	config.dst_addr = (phys_addr_t)(slave->base + MCSPI_TX0);
-	config.src_addr_width = width;
-	config.dst_addr_width = width;
-	config.src_maxburst = burst;
-	config.dst_maxburst = burst;
+	config->src_addr = (phys_addr_t)(slave->base + MCSPI_RX0);
+	config->dst_addr = (phys_addr_t)(slave->base + MCSPI_TX0);
+	config->src_addr_width = width;
+	config->dst_addr_width = width;
+	config->src_maxburst = burst;
+	config->dst_maxburst = burst;
 
-
-	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		mcspi_slave_dma_tx_transfer(slave, config);
-
-	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		mcspi_slave_dma_rx_transfer(slave, config);
+	/*if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+		mcspi_slave_dma_rx_transfer(slave);*/
 
 	return ret;
 }
@@ -838,13 +848,17 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_set_cs(slave);
 		ret = mcspi_slave_set_irq(slave);
 
+		if (ret < 0) {
+			pr_err("%s IRQ is not avilable!!\n", DRIVER_NAME);
+			return ret;
+		}
 
 		if (slave->dma_channel.dma_rx == NULL ||
 		    slave->dma_channel.dma_tx == NULL) {
 			ret = mcspi_slave_request_dma(slave);
 
 			if (ret < 0 && ret != -EAGAIN) {
-				pr_err("%s: DMA is not avilable", DRIVER_NAME);
+				pr_err("%s: DMA isn't avilable\n", DRIVER_NAME);
 				return ret;
 
 			}
@@ -860,7 +874,7 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 static void mcspi_slave_clean_up(struct spi_slave *slave)
 {
-	pr_info("%s: clean up", DRIVER_NAME);
+	pr_info("%s: clean up\n", DRIVER_NAME);
 
 	tasklet_kill(&pio_rx_tasklet);
 
@@ -879,8 +893,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 		dma_release_channel(slave->dma_channel.dma_rx);
 		slave->dma_channel.dma_rx = NULL;
 	}
-
-
 
 	kfree(slave);
 }
@@ -1186,8 +1198,13 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 
 	pr_info("%s: write count:%d\n", DRIVER_NAME, count);
 	slave->tx_offset = 0;
+
 	mcspi_slave_enable(slave);
-	mcspi_slave_pio_tx_transfer(slave, count);
+
+	if (SPI_TRANSFER_MODE == SPI_DMA_MODE)
+		mcspi_slave_dma_tx_transfer(slave);
+	else
+		mcspi_slave_pio_tx_transfer(slave, count);
 
 	return ret;
 }

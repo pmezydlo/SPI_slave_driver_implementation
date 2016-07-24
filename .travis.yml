@@ -24,7 +24,7 @@ before_script:
   - export SOURCE_LOCATION="https://github.com/RobertCNelson"
   
   - wget "$SOURCE_LOCATION/$SOURCE_REPO/archive/$SOURCE_BRANCH-$SOURCE_VERSION.tar.gz"
-  - tar -zvxf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
+  - tar xf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
 
   - export DST_KERNEL=$PWD/$SOURCE_REPO-$SOURCE_BRANCH-$SOURCE_VERSION
 
