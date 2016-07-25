@@ -270,6 +270,8 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	void __iomem				*rx_reg;
 	void __iomem				*chstat;
 
+	pr_info("%s: pio rx transfer\n", DRIVER_NAME);
+
 	slave = (struct spi_slave *) data;
 
 	rx_reg = slave->base + MCSPI_RX0;
@@ -344,6 +346,8 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave,
 	unsigned int				c;
 	void __iomem				*tx_reg;
 	void __iomem				*chstat;
+
+	pr_info("%s: pio tx transfer\n", DRIVER_NAME);
 
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
@@ -478,6 +482,8 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	u32					l;
 	int					ret = 0;
 
+	pr_info("%s: setup pio transfer\n", DRIVER_NAME);
+
 	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
 	l &= ~MCSPI_XFER_AEL;
@@ -523,6 +529,8 @@ static void mcspi_slave_dma_request_enable(struct spi_slave *slave,
 {
 	u32					l;
 
+	pr_info("%s: dma disabled\n", DRIVER_NAME);
+
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
 	if (rw) /*1 is read, 0 write*/
@@ -537,6 +545,8 @@ static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
 					    unsigned int rw)
 {
 	u32					l;
+
+	pr_info("%s: dma enabled\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
@@ -574,12 +584,39 @@ static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 {
 	struct spi_slave_dma			*dma_channel;
 	struct dma_slave_config			*config;
+	unsigned int				count;
 
 	dma_channel = &slave->dma_channel;
 	config = &dma_channel->config;
 
+	/*for now transfer is const longer*/
+	count = 8;
+
 	pr_info("%s: tx dma transfer\n", DRIVER_NAME);
 
+	if (dma_channel->dma_tx) {
+		struct dma_async_tx_descriptor	*tx;
+		struct scatterlist		sg;
+
+		dmaengine_slave_config(dma_channel->dma_tx, config);
+
+		sg_init_table(&sg, 1);
+		sg_dma_address(&sg) = &dma_channel->dma_tx;
+		sg_dma_len(&sg) = count;
+
+		tx = dmaengine_prep_slave_sg(dma_channel->dma_tx, &sg, 1,
+		     DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT | DMA_CTRL_ACK);
+
+		if (tx) {
+			tx->callback = mcspi_slave_dma_tx_callback;
+			tx->callback_param = slave;
+			dmaengine_submit(tx);
+		} else {
+			pr_err("%s: transfer tx error\n", DRIVER_NAME);
+		}
+	}
+
+	dma_async_issue_pending(dma_channel->dma_tx);
 	mcspi_slave_dma_request_enable(slave, 0);
 }
 
@@ -604,11 +641,34 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	enum dma_slave_buswidth			width;
 	unsigned int				bpw;
 	u32					burst;
+	const void				*tx_buf;
+	void					*rx_buf;
+	unsigned int				len;
 
-	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
+	/*for now transfer dma is const length*/
+	len = 8;
 
 	dma_channel = &slave->dma_channel;
 	config = &dma_channel->config;
+
+	tx_buf = slave->tx;
+	rx_buf = slave->rx;
+
+	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
+
+
+	if (dma_channel->dma_tx && tx_buf != NULL) {
+		pr_info("%s: mapping tx dma\n", DRIVER_NAME);
+
+		dma_channel->dma_tx = dma_map_single(slave->dev, (void *)tx_buf,
+						     len, DMA_TO_DEVICE);
+
+		if (dma_mapping_error(slave->dev, dma_channel->dma_tx)) {
+			pr_err("%s: dma error!\n", DRIVER_NAME);
+			return -EINVAL;
+		}
+
+	}
 
 	bpw = mcspi_slave_bytes_per_word(slave->bits_per_word);
 
@@ -630,8 +690,10 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	config->src_maxburst = burst;
 	config->dst_maxburst = burst;
 
-	/*if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		mcspi_slave_dma_rx_transfer(slave);*/
+	/*
+	 * if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
+	 *	mcspi_slave_dma_rx_transfer(slave);
+	 */
 
 	return ret;
 }
