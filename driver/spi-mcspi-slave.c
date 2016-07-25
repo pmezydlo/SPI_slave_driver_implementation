@@ -149,6 +149,9 @@ struct spi_slave_dma {
 	struct dma_chan				*dma_tx;
 	struct dma_chan				*dma_rx;
 
+	dma_addr_t				tx_dma_addr;
+	dma_addr_t				rx_dma_addr;
+
 	int					dma_tx_sync_dev;
 	int					dma_rx_sync_dev;
 
@@ -529,7 +532,7 @@ static void mcspi_slave_dma_request_enable(struct spi_slave *slave,
 {
 	u32					l;
 
-	pr_info("%s: dma disabled\n", DRIVER_NAME);
+	pr_info("%s: dma enabled\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
@@ -546,7 +549,7 @@ static void mcspi_slave_dma_request_disable(struct spi_slave *slave,
 {
 	u32					l;
 
-	pr_info("%s: dma enabled\n", DRIVER_NAME);
+	pr_info("%s: dma disabled\n", DRIVER_NAME);
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
@@ -601,7 +604,7 @@ static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 		dmaengine_slave_config(dma_channel->dma_tx, config);
 
 		sg_init_table(&sg, 1);
-		sg_dma_address(&sg) = &dma_channel->dma_tx;
+		sg_dma_address(&sg) = dma_channel->tx_dma_addr;
 		sg_dma_len(&sg) = count;
 
 		tx = dmaengine_prep_slave_sg(dma_channel->dma_tx, &sg, 1,
@@ -660,10 +663,11 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	if (dma_channel->dma_tx && tx_buf != NULL) {
 		pr_info("%s: mapping tx dma\n", DRIVER_NAME);
 
-		dma_channel->dma_tx = dma_map_single(slave->dev, (void *)tx_buf,
-						     len, DMA_TO_DEVICE);
+		dma_channel->tx_dma_addr = dma_map_single(slave->dev,
+							  (void *)tx_buf,
+							  len, DMA_TO_DEVICE);
 
-		if (dma_mapping_error(slave->dev, dma_channel->dma_tx)) {
+		if (dma_mapping_error(slave->dev, dma_channel->tx_dma_addr)) {
 			pr_err("%s: dma error!\n", DRIVER_NAME);
 			return -EINVAL;
 		}
@@ -908,11 +912,15 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		mcspi_slave_disable(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
-		ret = mcspi_slave_set_irq(slave);
 
-		if (ret < 0) {
-			pr_err("%s IRQ is not avilable!!\n", DRIVER_NAME);
-			return ret;
+		if (SPI_TRANSFER_MODE == SPI_PIO_MODE) {
+			ret = mcspi_slave_set_irq(slave);
+
+			if (ret < 0) {
+				pr_err("%s IRQ is not avilable!!\n",
+				       DRIVER_NAME);
+				return ret;
+			}
 		}
 
 		if (slave->dma_channel.dma_rx == NULL ||
