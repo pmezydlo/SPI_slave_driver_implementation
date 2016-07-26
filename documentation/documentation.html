@@ -247,6 +247,7 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 	<pre>$ sudo apt-get update -qq</pre>
 	<pre>$ sudo apt-get install bc </pre>
 	<li>Cross-compiler toolchain - To download the latest version of cross-compiler tool-chain:</li>
+	<pre>$ apt-get install gcc-arm-linux-gnueabi</pre>
 	<pre>$ wget -c https://releases.linaro.org/components/toolchain/binaries/5.3-2016.02/arm-linux-gnueabihf/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz</pre>
 	<pre>$ tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz</pre>
 	<pre>$ export CC=`pwd`/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-</pre>
@@ -351,6 +352,9 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
  	<pre> 2: PF----  -1</pre>
  	<pre> 3: PF----  -1</pre>
  	<pre> 5: P-O-L-   0 Override Board Name,00A0,Override Manuf,SPI0_slave</pre>
+	<pre>$ cat /proc/interrupt</pre>
+	<pre>172:          3      INTC  65 Level     spi-mcspi-slave</pre>
+
 	</ol>
 </ol>
 <ol>
@@ -367,8 +371,11 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 
 <h2 id="first-data-transfer">First data transfer</h2>	
 <ol>
+	<li>Run SPI slave application:</li>
+	<pre>./slave_app --w --r</pre>
+	<li>Application and driver waiting for the data, connect the master and make your first transfer!!!</li>
 </ol>
-
+<img src="pio_con.png" alt="pio console"/>
 
 
 
