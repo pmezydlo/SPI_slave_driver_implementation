@@ -9,8 +9,7 @@ before_install:
   
   - wget -c https://releases.linaro.org/components/toolchain/binaries/5.3-2016.02/arm-linux-gnueabihf/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
   - tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
-  - export PATH=$PATH:$PWD/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/
-  - arm-linux-gnueabihf-gcc --version
+  - export CC=`pwd`/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
   
   - sudo apt-get install bc
 
@@ -24,19 +23,16 @@ before_script:
   - export SOURCE_LOCATION="https://github.com/RobertCNelson"
   
   - wget "$SOURCE_LOCATION/$SOURCE_REPO/archive/$SOURCE_BRANCH-$SOURCE_VERSION.tar.gz"
-  - tar -zvxf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
+  - tar xf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
 
   - export DST_KERNEL=$PWD/$SOURCE_REPO-$SOURCE_BRANCH-$SOURCE_VERSION
 
 script:
 
-  - export ARCH=arm 
-  - export CROSS_COMPILE=arm-linux-gnueabihf-
-  
   - cd $DST_KERNEL
-  - make -j3 mrproper ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION
+  - make -j3 mrproper ARCH=arm CROSS_COMPILE=$(CC) LOCALVERSION=-$SOURCE_VERSION
   - wget -c "http://rcn-ee.net/deb/jessie-armhf/v$SOURCE_BRANCH-$SOURCE_VERSION/defconfig" -O .config
-  - make -j3 modules ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION 2>&1 
+  - make -j3 modules ARCH=arm CROSS_COMPILE=$(CC) LOCALVERSION=-$SOURCE_VERSION 2>&1 
 
   - cd $DST_PROJECT/
 
@@ -44,4 +40,14 @@ script:
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/*
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/* 
 
-  - make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION
+  - make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=$(CC)  LOCALVERSION=-$SOURCE_VERSION
+
+  - sudo wget -c https://raw.githubusercontent.com/RobertCNelson/tools/master/pkgs/dtc.sh
+  - sudo chmod +x dtc.sh
+  - sudo ./dtc.sh
+
+  - cd $DST_PROJECT/DTS/
+
+  - sudo dtc -O dtb -o SPI0_slave-00A0.dtbo -b 0 -@ SPI0_slave.dts
+  - sudo dtc -O dtb -o SPI1_slave-00A0.dtbo -b 0 -@ SPI1_slave.dts
+

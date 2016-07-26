@@ -11,16 +11,17 @@
 <ol>
 	<li><a href="#introduction">Introduction</a></li>
 	<li><a href="#links">Links</a></li>
-    <li><a href="#block-diagram">Block diagram</a></li>	
+    	<li><a href="#block-diagram">Block diagram</a></li>	
 	<li><a href="#slave-driver-in-linux-architecture">Slave driver in Linux architecture</a></li>	
 	<li><a href="#problems">Problems</a></li>
 	<li><a href="#development-timeline">Development timeline</a></li>
         <li><a href="#photos-from-tests">Photos from tests</a></li>
 	<li><a href="#am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</a></li>
 	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
-	<li><a href="#building-on-beaglebone-board">Building driver on BeagleBone Board</a></li>	
 	<li><a href="#building-on-x86-platform">Building driver on x86 platform</a></li>
-	<li><a href="#device-tree-overlays">Device Tree Overlays</a></li>
+	<li><a href="#prepare-BB-board">Prepare BB board</a></li>
+	<li><a href="#installing-on-BB-platform">Installing driver on BB platform</a></li>
+	<li><a href="#first-data-transfer">First data transfer</a></li>
 	<li><a href="#testing-and-wiring">Testing and wiring</a></li>
 </ol>
 
@@ -168,14 +169,14 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <li>
 	<p>Week 7(05 July - 12 July)✔</p>
 	<ul>
-<li>finalized work on thorough reconstruction of the driver ✔</li>
-<li>first prototype test ✔</li>
-<li>finalized work on ioctl and poll ✔</li>
-<li>finalized work on prototype slave application and pio transfer ✔</li>
-<li>familiarizing myself with DMA ✔</li>
-<li>searched for bugs and repaired them ✔</li>
-<li>upgraded travis script ✔</li>
-<li>made a nice diagram ✔</li>
+	<li>finalized work on thorough reconstruction of the driver ✔</li>
+	<li>first prototype test ✔</li>
+	<li>finalized work on ioctl and poll ✔</li>
+	<li>finalized work on prototype slave application and pio transfer ✔</li>
+	<li>familiarizing myself with DMA ✔</li>
+	<li>searched for bugs and repaired them ✔</li>
+	<li>upgraded travis script ✔</li>
+	<li>made a nice diagram ✔</li>
 
 </ul>
 </li>
@@ -240,69 +241,137 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <a href="http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf">[2]http://infoman.teikav.edu.gr/~stpapad/linux_kernel_development_3rd_edition.pdf</a>
 
 		
-<h2 id="building-on-beaglebone-board">Building on BeagleBone Board</h2>	
-<ol>
-	<li>Installing compiler:</li>
-	<pre>apt-get install gcc</pre>
-	<li>Installing kernel headers:</li>
-	<pre>sudo apt-get install linux-headers-'uname -r'</pre>
-	<li>Cloning SPI slave repository:</li>
-	<pre>git clone git@github.com:pmezydlo/SPI_slave_driver_implementation.git</pre>
-	<pre>cd SPI_slave_driver_implementation/</pre>	
-	<pre>git checkout</pre>
-	<li>Building SPI slave driver:</li>
-	<pre>make</pre>				
-</ol>
 <h2 id="building-on-x86-platform">Building on x86 platform</h2>	
 <ol>
-	<li>Installing the arm32 cross-compiler:</li>
-	<pre>sudo apt-get update -qq</pre>
-	<pre>sudo apt-get install -y gcc-arm-linux-gnueabihf</pre>
-	<pre>sudo apt-get install bc </pre>
+	<li>Update your linux:</li>
+	<pre>$ sudo apt-get update -qq</pre>
+	<pre>$ sudo apt-get install bc </pre>
+	<li>Cross-compiler toolchain - To download the latest version of cross-compiler tool-chain:</li>
+	<pre>$ wget -c https://releases.linaro.org/components/toolchain/binaries/5.3-2016.02/arm-linux-gnueabihf/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz</pre>
+	<pre>$ tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz</pre>
+	<pre>$ export CC=`pwd`/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-</pre>
 	<li>Cloning SPI slave repository:</li>
-	<pre>git clone git@github.com:pmezydlo/SPI_slave_driver_implementation.git</pre>	
-	<pre>cd SPI_slave_driver_implementation/</pre>
-	<pre>git checkout</pre>	
-	<li>Downloading Linux headers:</li>
-	<pre>wget https://github.com/beagleboard/linux/archive/4.4.8-ti-rt-r22.tar.gz</pre>
-	<li>Unpacking Linux headers:</li>
-	<pre>tar zvxf 4.4.8-ti-rt-r22.tar.gz</pre>
-	<li>Installing Linux headers:</li>
-	<pre>make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- mrproper</pre>
-	<pre>make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- defconfig</pre>
-	<pre>make -j3 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- modules</pre>	
-	<pre>cd ../</pre>
-	<li>Building SPI slave driver:</li>
-	<pre>make</pre>				
+	<pre>$ git clone git@github.com:pmezydlo/SPI_slave_driver_implementation.git</pre>	
+	<pre>$ cd SPI_slave_driver_implementation/</pre>
+	<pre>$ git checkout</pre>	
+	<li>Check kernel version on your BB board (connect with your board):</li>
+	<pre>$ ssh root@192.168.7.2</pre>
+	<pre>$ uname -r</pre>
+	<pre>4.4.8-ti-r22</pre>
+	<li>BBB clone kernel source:</li>
+	<pre>$ export SOURCE_BRANCH="4.4.8"</pre>
+	<pre>$ export SOURCE_VERSION="ti-r22"</pre>
+	<pre>$ export SOURCE_REPO="linux-stable-rcn-ee"</pre>
+	<pre>$ export SOURCE_LOCATION="https://github.com/RobertCNelson"</pre>
+	<pre>$ wget "$SOURCE_LOCATION/$SOURCE_REPO/archive/$SOURCE_BRANCH-$SOURCE_VERSION.tar.gz"</pre>
+	<pre>$ tar xf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz</pre>
+	<pre>$ export DST_KERNEL=$PWD/$SOURCE_REPO-$SOURCE_BRANCH-$SOURCE_VERSION</pre>	
+	<li>Cross compiling the kernel source:</li>
+	<pre>$ cd $DST_KERNEL</pre>
+	<pre>$ make -j3 mrproper ARCH=arm CROSS_COMPILE=$(CC) LOCALVERSION=-$SOURCE_VERSION</pre>
+	<pre>$ wget -c "http://rcn-ee.net/deb/jessie-armhf/v$SOURCE_BRANCH-$SOURCE_VERSION/defconfig" -O .config</pre>
+	<pre>$ make -j3 modules ARCH=arm CROSS_COMPILE=$(CC) LOCALVERSION=-$SOURCE_VERSION 2>&1</pre> 
+	<li>Cross compile SPI slave driver:</li>
+	<pre>make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=$(CC) LOCALVERSION=-$SOURCE_VERSION</pre>	
+	<li>Check the driver version:</li>
+	<pre>$ modinfo driver/spi-mcspi-slave.ko</pre>
+	<pre>filename:       /home/pmezydlo/BeagleBoard_work/SPI_slave_driver_implementation/driver/spi-mcspi-slave.ko</pre> 
+	<pre>version:        1.0</pre> 
+	<pre>description:    SPI slave for McSPI controller.</pre> 
+	<pre>author:         Patryk Mezydlo, <mezydlo.p@gmail.com></pre> 
+	<pre>license:        GPL v2</pre> 
+	<pre>srcversion:     469EA334B14612EBD6F0463</pre> 
+	<pre>alias:          of:N*T*Cti,omap4-mcspi*</pre> 
+	<pre>depends:        </pre> 
+	<pre>vermagic:       4.4.8-ti-r22 SMP mod_unload modversions ARMv7 thumb2 p2v8 </pre> 
 </ol>
 
-
-<h2 id="device-tree-overlays">Device Tree Overlays</h2>	
-<p>DTS is required to operate SPI. In repository there is three device tree source which is located in /DTS/ directory.</p>
-<h3>Building:</h3>
+<h2 id="prepare-BB-board">Prepare BB board</h2>	
 <ol>
-	<li>Go to the directory:</li>
-	<pre>cd DTS/</pre>
-	<li>Building DTS:</li>
-	<pre>dtc -O dtb -o SPI0_master-00A0.dtbo -b 0 -@ SPI0_master.dts</pre>	
-	<li>Copying dtbo files to /lib/firmware/:</li>
-	<pre>cp SPI0_master-00A0.dtbo /lib/firmware/</pre>
+	<h3>Disabling the BeagleBone black hdmi cape</h3>
+	<ol>
+	<li>Mount the FAT partition:</li>
+	<pre>$ mount /dev/mmcblk0p1  /mnt/card</pre> 
+	<li>Edit the uEnv.txt on the mounted partition:</li>
+	<pre>$ nano /mnt/card/uEnv.txt</pre> 
+	<li>To disable the HDMI Cape, change the contents of uEnv.txt to:</li>
+	<pre>$ optargs=quiet capemgr.disable_partno=BB-BONELT-HDMI,BB-BONELT-HDMIN</pre> 
+	<li>Save the file:</li>
+	<pre>Ctrl-X, Y</pre> 
+	<li>Unmount the partition:</li>
+	<pre>$ umount /mnt/card</pre> 
+	<li>Reboot the board:</li>
+	<pre>$ shutdown -r now</pre> 
+	<li>Wait about 10 seconds and reconnect to the BeagleBone Black through SSH. To see what capes are enabled:</li>
+	<pre>$ cat /sys/devices/bone_capemgr.*/slots</pre> 
+	</ol>
+</ol>
+<ol>
+	<h3>Disabling the spi master driver(spi_omap2_mcspi)</h3>
+	<ol>
+	<li>Create a file:</li>
+	<pre>$ nano /etc/modprobe.d/spi_omap2_mcspi.conf</pre> 
+	<li>Edit the spi_omap2_mcspi.conf:</li>
+	<pre>blacklist spi_omap2_mcspi</pre> 
+	<li>Save the file:</li>
+	<pre>Ctrl-X, Y</pre> 
+	<li>Reboot the board:</li>
+	<pre>$ shutdown -r now</pre> 
+	</ol>
+
+	<h3>Installing the Device Tree Overlays(DTS)</h3>
+	<ol>
+	<li>Installing the DTS compiler:</li>
+	<pre>$ wget -c https://raw.githubusercontent.com/RobertCNelson/tools/master/pkgs/dtc.sh</pre>
+	<pre>$ chmod +x dtc.sh</pre>
+	<pre>$ ./dtc.sh</pre>
+	<li>Compiling the SPI slave dts file:</li>
+	<pre>$ cd DTS/</pre>
+	<pre>dtc -O dtb -o SPI0_slave-00A0.dtbo -b 0 -@ SPI0_slave.dts</pre>
+	</ol>
+
+	<h3>Upload spi slave driver, dtb and slave application on BB board:</h3>
+	<ol>
+	<li>Upload using SCP:</li>	
+	<pre>$ scp driver/spi-mcspi-slave.ko  root@192.168.137.2:/root</pre>
+	<pre>$ scp slave_app/slave_app  root@192.168.137.2:/root</pre>
+	<pre>$ scp DTS/SPI0_slave-00A0.dtbo  root@192.168.137.2:/lib/firmware</pre>
+	</ol>
 </ol>
 
-<h3>Installing:</h3>
+<h2 id="installing-on-BB-platform">Installing driver on BB platform</h2>	
 <ol>
-	<li>Installing DTS:</li>
-	<pre>echo SPI0_master>/sys/devices/platform/bone_capemgr/slots</pre>
+	<h3>Installing DTS:</h3>
+	<ol><li>Make an entry:</li>
+	<pre>echo SPI0_slave>/sys/devices/platform/bone_capemgr/slots</pre>
 	<li>Checking:</li>
-	<pre>cat /sys/devices/platform/bone_capemgr/slots</pre>	
-	<li>Result:</li>
-	<pre> 0: PF----  -1
- 1: PF----  -1
- 2: PF----  -1
- 3: PF----  -1
- 5: P-O-L-   0 Override Board Name,00A0,Override Manuf,SPI0_master
-</pre>
+	<pre>$ cat /sys/devices/platform/bone_capemgr/slots</pre>	
+	<pre> 0: PF----  -1</pre>
+ 	<pre> 1: PF----  -1</pre>
+ 	<pre> 2: PF----  -1</pre>
+ 	<pre> 3: PF----  -1</pre>
+ 	<pre> 5: P-O-L-   0 Override Board Name,00A0,Override Manuf,SPI0_slave</pre>
+	</ol>
 </ol>
+<ol>
+	<h3>Installing driver:</h3>
+	<ol><li>Command insmod:</li>
+	<pre>insmod spi-mcspi-slave.ko </pre>
+	<li>Checking:</li>
+	<pre>$ lsmod</pre>	
+	<pre>Module                  Size  Used by</pre>
+	<pre>spi_mcspi_slave        10781  0 </pre></ol>
+</ol>
+
+
+
+<h2 id="first-data-transfer">First data transfer</h2>	
+<ol>
+</ol>
+
+
+
+
 
 <h2 id="testing-and-wiring">Testing and wiring</h2>	
 <h3>The first option:</h3>
