@@ -6,14 +6,13 @@ os:
 before_install:
 
   - sudo apt-get update -qq
-  
-  - wget -c https://releases.linaro.org/components/toolchain/binaries/5.3-2016.02/arm-linux-gnueabihf/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
-  - tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
-  - export CC=`pwd`/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
-  
   - sudo apt-get install bc
 
 before_script:
+  
+  - wget -c https://releases.linaro.org/components/toolchain/binaries/5.3-2016.02/arm-linux-gnueabihf/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
+  - tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
+  - export CC=$PWD/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
 
   - export DST_PROJECT=$PWD
 
@@ -40,7 +39,7 @@ script:
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/*
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/* 
 
-  - make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=$(CC)  LOCALVERSION=-$SOURCE_VERSION
+  - make
 
   - sudo wget -c https://raw.githubusercontent.com/RobertCNelson/tools/master/pkgs/dtc.sh
   - sudo chmod +x dtc.sh
