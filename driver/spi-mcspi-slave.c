@@ -630,6 +630,8 @@ static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 	wait_for_completion(&dma_channel->dma_tx_completion);
 	dma_unmap_single(slave->dev, dma_channel->tx_dma_addr, count,
 			 DMA_TO_DEVICE);
+
+
 }
 
 static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
@@ -719,6 +721,8 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	 * if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
 	 *	mcspi_slave_dma_rx_transfer(slave);
 	 */
+
+	mcspi_slave_dma_tx_transfer(slave);
 
 	return ret;
 }
@@ -882,6 +886,9 @@ static int mcspi_slave_request_dma(struct spi_slave *slave)
 
 	pr_info("%s: request dma\n", DRIVER_NAME);
 
+	init_completion(&dma_channel->dma_tx_completion);
+	init_completion(&dma_channel->dma_rx_completion);
+
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
@@ -954,6 +961,8 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 			}
 		}
+
+		mcspi_slave_setup_transfer(slave);
 
 	} else {
 		pr_err("%s: internal module reset is on-going\n",
