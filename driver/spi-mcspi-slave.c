@@ -156,6 +156,9 @@ struct spi_slave_dma {
 	int					dma_rx_sync_dev;
 
 	struct dma_slave_config			config;
+
+	struct completion			dma_tx_completion;
+	struct completion			dma_rx_completion;
 };
 
 #define DMA_MIN_BYTES				33
@@ -570,6 +573,8 @@ static void mcspi_slave_dma_tx_callback(void *data)
 	pr_info("%s: end of DMA tx transfer\n", DRIVER_NAME);
 
 	mcspi_slave_dma_request_disable(slave, 0);
+
+	complete(&slave->dma_channel.dma_tx_completion);
 }
 
 static void mcspi_slave_dma_rx_callback(void *data)
@@ -621,6 +626,10 @@ static void mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 
 	dma_async_issue_pending(dma_channel->dma_tx);
 	mcspi_slave_dma_request_enable(slave, 0);
+
+	wait_for_completion(&dma_channel->dma_tx_completion);
+	dma_unmap_single(slave->dev, dma_channel->tx_dma_addr, count,
+			 DMA_TO_DEVICE);
 }
 
 static void mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
@@ -647,9 +656,21 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 	const void				*tx_buf;
 	void					*rx_buf;
 	unsigned int				len;
+	u32					l;
 
 	/*for now transfer dma is const length*/
 	len = 8;
+
+	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
+
+	l &= ~MCSPI_XFER_AEL;
+	l &= ~MCSPI_XFER_AFL;
+
+	l &= ~MCSPI_XFER_WCNT;
+	/*l |= len << 16;*/
+
+	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
+
 
 	dma_channel = &slave->dma_channel;
 	config = &dma_channel->config;
