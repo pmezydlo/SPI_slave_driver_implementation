@@ -638,10 +638,10 @@ static int mcspi_slave_dma_tx_transfer(struct spi_slave *slave)
 	sg_dma_len(&dma_channel->sg_tx) = slave->len;
 
 	tx_desc = dmaengine_prep_slave_sg(dma_channel->dma_tx,
-				          &dma_channel->sg_tx, 1,
-				          DMA_MEM_TO_DEV,
+					  &dma_channel->sg_tx, 1,
+					  DMA_MEM_TO_DEV,
 					  DMA_PREP_INTERRUPT |
-				          DMA_CTRL_ACK);
+					  DMA_CTRL_ACK);
 
 	if (!tx_desc)
 		goto err_dma;
@@ -685,10 +685,10 @@ static int mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
 	sg_dma_len(&dma_channel->sg_rx) = slave->len;
 
 	rx_desc = dmaengine_prep_slave_sg(dma_channel->dma_rx,
-				          &dma_channel->sg_rx, 1,
-				          DMA_MEM_TO_DEV,
+					  &dma_channel->sg_rx, 1,
+					  DMA_MEM_TO_DEV,
 					  DMA_PREP_INTERRUPT |
-				          DMA_CTRL_ACK);
+					  DMA_CTRL_ACK);
 
 	if (!rx_desc)
 		goto err_dma;
