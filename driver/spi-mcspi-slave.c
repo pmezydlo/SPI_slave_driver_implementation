@@ -686,7 +686,7 @@ static int mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
 
 	rx_desc = dmaengine_prep_slave_sg(dma_channel->dma_rx,
 					  &dma_channel->sg_rx, 1,
-					  DMA_MEM_TO_DEV,
+					  DMA_DEV_TO_MEM,
 					  DMA_PREP_INTERRUPT |
 					  DMA_CTRL_ACK);
 
@@ -699,6 +699,7 @@ static int mcspi_slave_dma_rx_transfer(struct spi_slave *slave)
 	cookie = rx_desc->tx_submit(rx_desc);
 	if (dma_submit_error(cookie))
 		goto err_dma;
+
 	dma_async_issue_pending(dma_channel->dma_rx);
 	mcspi_slave_dma_request_enable(slave, 1);
 
