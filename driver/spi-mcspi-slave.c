@@ -154,9 +154,6 @@ struct spi_slave_dma {
 	dma_addr_t				tx_dma_addr;
 	dma_addr_t				rx_dma_addr;
 
-	int					dma_tx_sync_dev;
-	int					dma_rx_sync_dev;
-
 	struct dma_slave_config			config;
 
 	struct completion			dma_tx_completion;
@@ -950,7 +947,6 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 static int mcspi_slave_request_dma(struct spi_slave *slave)
 {
 	dma_cap_mask_t				mask;
-	unsigned				sig;
 	struct spi_slave_dma			*dma_channel;
 
 	dma_channel = &slave->dma_channel;
@@ -963,17 +959,15 @@ static int mcspi_slave_request_dma(struct spi_slave *slave)
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
-	sig = slave->dma_channel.dma_rx_sync_dev;
 	slave->dma_channel.dma_rx = dma_request_slave_channel_compat(mask,
-				    omap_dma_filter_fn, &sig, slave->dev,
+				    omap_dma_filter_fn, NULL, slave->dev,
 				    "rx0");
 
 	if (dma_channel->dma_rx == NULL)
 		goto no_dma;
 
-	sig = dma_channel->dma_tx_sync_dev;
 	dma_channel->dma_tx = dma_request_slave_channel_compat(mask,
-			      omap_dma_filter_fn, &sig, slave->dev,
+			      omap_dma_filter_fn, NULL, slave->dev,
 			      "tx0");
 
 	if (dma_channel->dma_tx == NULL) {
@@ -1103,8 +1097,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	unsigned long					minor;
 
-	struct resource					*dma_res;
-
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
 	dev  = &pdev->dev;
@@ -1199,31 +1191,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
 	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
 	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
-
-
-	if (!pdev->dev.of_node) {
-		dma_res = platform_get_resource_byname(pdev,
-						       IORESOURCE_DMA, "rx0");
-
-		if (!dma_res) {
-			pr_err("%s: cannot get DMA RX channel\n", DRIVER_NAME);
-			ret = -ENODEV;
-			goto free_slave;
-		}
-
-		slave->dma_channel.dma_rx_sync_dev = dma_res->start;
-
-		dma_res = platform_get_resource_byname(pdev,
-						       IORESOURCE_DMA, "tx0");
-
-		if (!dma_res) {
-			pr_err("%s: cannot get DMA TX channel\n", DRIVER_NAME);
-			ret = -ENODEV;
-			goto free_slave;
-		}
-
-		slave->dma_channel.dma_tx_sync_dev = dma_res->start;
-	}
 
 	pm_runtime_use_autosuspend(slave->dev);
 	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
