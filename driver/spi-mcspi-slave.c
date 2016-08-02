@@ -170,8 +170,8 @@ struct spi_slave_dma {
 
 struct spi_slave {
 	/*var defining device parameters*/
-	struct	device				*dev;
-	void	__iomem				*base;
+	struct device				*dev;
+	void __iomem				*base;
 	u32					start;
 	u32					end;
 	unsigned int				reg_offset;
@@ -188,13 +188,13 @@ struct spi_slave {
 	/*var defining msg */
 	u32					tx_offset;
 	u32					rx_offset;
-	void  __iomem				*tx;
-	void  __iomem				*rx;
+	void __iomem				*tx;
+	void __iomem				*rx;
 
 	/*var defining the char driver parameters*/
 	char					modalias[SPI_NAME_SIZE];
 	dev_t					devt;
-	struct	list_head			device_entry;
+	struct list_head			device_entry;
 	unsigned int				users;
 	wait_queue_head_t			wait;
 
@@ -739,7 +739,6 @@ static int mcspi_slave_setup_dma_transfer(struct spi_slave *slave)
 
 	pr_info("%s: dma transfer setup\n", DRIVER_NAME);
 
-
 	if (dma_channel->dma_tx && tx_buf != NULL) {
 		pr_info("%s: mapping tx dma\n", DRIVER_NAME);
 
@@ -1016,14 +1015,14 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 			}
 		}
 
-		if (slave->dma_channel.dma_rx == NULL ||
-		    slave->dma_channel.dma_tx == NULL) {
+		if (SPI_TRANSFER_MODE == SPI_DMA_MODE  &&
+		   (slave->dma_channel.dma_rx == NULL ||
+		    slave->dma_channel.dma_tx == NULL))  {
 			ret = mcspi_slave_request_dma(slave);
 
 			if (ret < 0 && ret != -EAGAIN) {
 				pr_err("%s: DMA isn't avilable\n", DRIVER_NAME);
 				return ret;
-
 			}
 		}
 
