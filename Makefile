@@ -8,7 +8,7 @@ SOURCE=linux-stable-rcn-ee
 
 KDIR := $(PWD)/$(SOURCE)-$(KERN_V)$(BUILD_V)
 
-obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o
+obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o driver/spi-slave-core.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER)  modules

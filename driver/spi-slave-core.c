@@ -3,40 +3,37 @@
 #include <linux/fs.h>
 #include <linux/of_device.h>
 #include <linux/device.h>
+#include <linux/kernel.h>
 
-#include "spi-slave-dev.h"
+#define DRIVER_NAME "spislave_core"
 #include "spi-slave-core.h"
 
-#define DRIVER_NAME			"spislavedev"
+static int spislave_device_match(struct device *dev,
+				 struct device_driver *drv)
+{
+	pr_info("%s: device match", DRIVER_NAME);
+	return 1;
+}
 
-static struct spislave_driver slave_driver = {
-	.version = "$rev: 1.1 $",
-	.module = THIS_MODULE,
-	.driver = {
-		.name = DRIVER_NAME,
-	},
+struct bus_type spislave_bus = {
+	.name = "spislave",
+	.match = spislave_device_match,
 };
 
 static int __init spislave_init(void)
 {
 	int			ret = 0;
 
-	struct spislave_driver	*driver;
-
-	driver = &slave_driver;
-
-	driver->driver.bus = &spislave_bus_type;
-	ret = driver_register(&driver->driver);
-	if (ret)
-		return ret;
-
 	pr_info("%s: init\n", DRIVER_NAME);
+
+	ret = bus_register(&spislave_bus);
 
 	return ret;
 }
 
 static void __exit spislave_exit(void)
 {
+	bus_unregister(&spislave_bus);
 	pr_info("%s: exit\n", DRIVER_NAME);
 }
 
