@@ -5,8 +5,17 @@
 #include <linux/device.h>
 #include <linux/kernel.h>
 
-#define DRIVER_NAME "spislave_core"
 #include "spi-slave-core.h"
+#define DRIVER_NAME "spislavecore"
+
+int spislave_register_driver(struct spislave_driver *sdrv)
+{
+	sdrv->driver.owner = THIS_MODULE;
+	sdrv->driver.bus = &spislave_bus_type;
+
+	return driver_register(&sdrv->driver);
+}
+EXPORT_SYMBOL_GPL(spislave_register_driver);
 
 static int spislave_device_match(struct device *dev,
 				 struct device_driver *drv)
@@ -15,7 +24,7 @@ static int spislave_device_match(struct device *dev,
 	return 1;
 }
 
-struct bus_type spislave_bus = {
+struct bus_type spislave_bus_type = {
 	.name = "spislave",
 	.match = spislave_device_match,
 };
@@ -26,14 +35,14 @@ static int __init spislave_init(void)
 
 	pr_info("%s: init\n", DRIVER_NAME);
 
-	ret = bus_register(&spislave_bus);
+	ret = bus_register(&spislave_bus_type);
 
 	return ret;
 }
 
 static void __exit spislave_exit(void)
 {
-	bus_unregister(&spislave_bus);
+	bus_unregister(&spislave_bus_type);
 	pr_info("%s: exit\n", DRIVER_NAME);
 }
 

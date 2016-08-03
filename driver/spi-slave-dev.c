@@ -10,8 +10,6 @@
 #define DRIVER_NAME			"spislavedev"
 
 static struct spislave_driver slave_driver = {
-	.version = "$rev: 1.1 $",
-	.module = THIS_MODULE,
 	.driver = {
 		.name = DRIVER_NAME,
 	},
@@ -21,12 +19,7 @@ static int __init spislave_init(void)
 {
 	int			ret = 0;
 
-	struct spislave_driver	*driver;
-
-	driver = &slave_driver;
-
-	driver->driver.bus = &spislave_bus_type;
-	ret = driver_register(&driver->driver);
+	ret = spislave_register_driver(&slave_driver);
 	if (ret)
 		return ret;
 
