@@ -9,7 +9,7 @@ struct spislave_driver {
 };
 
 extern int spislave_register_driver(struct spislave_driver *sdrv);
-
+extern void spislave_unregister_driver(struct spislave_driver *sdrv);
 
 
 

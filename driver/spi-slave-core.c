@@ -17,6 +17,12 @@ int spislave_register_driver(struct spislave_driver *sdrv)
 }
 EXPORT_SYMBOL_GPL(spislave_register_driver);
 
+void spislave_unregister_driver(struct spislave_driver *sdrv)
+{
+	driver_unregister(&sdrv->driver);
+}
+EXPORT_SYMBOL_GPL(spislave_unregister_driver);
+
 static int spislave_device_match(struct device *dev,
 				 struct device_driver *drv)
 {

@@ -30,6 +30,7 @@ static int __init spislave_init(void)
 
 static void __exit spislave_exit(void)
 {
+	spislave_unregister_driver(&slave_driver);
 	pr_info("%s: exit\n", DRIVER_NAME);
 }
 
