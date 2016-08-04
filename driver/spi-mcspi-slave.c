@@ -22,6 +22,7 @@
 #include <linux/platform_data/spi-omap2-mcspi.h>
 
 #include "spi-slave-dev.h"
+#include "spi-slave-core.h"
 
 #define MCSPI_PIN_DIR_D0_IN_D1_OUT		0
 #define MCSPI_PIN_DIR_D0_OUT_D1_IN		1
@@ -730,6 +731,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pol;
 
 	unsigned long					minor;
+	struct spislave_device				slave_dev;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
@@ -876,9 +878,14 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		list_add(&slave->device_entry, &device_list);
 	}
 
-	return ret;
+	slave_dev.dev.parent = slave->dev;
+	slave_dev.dev.of_node = node;
+	sprintf(slave_dev.name, "%s%d\n", DRIVER_NAME, slave->bus_num);
+	ret = spislave_register_device(&slave_dev);
+	if (ret)
+		goto disable_pm;
 
-	pr_info("%s: register device\n", DRIVER_NAME);
+	return ret;
 
 disable_pm:
 	pm_runtime_dont_use_autosuspend(slave->dev);

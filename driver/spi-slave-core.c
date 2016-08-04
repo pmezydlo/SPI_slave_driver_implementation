@@ -23,6 +23,30 @@ void spislave_unregister_driver(struct spislave_driver *sdrv)
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_driver);
 
+int spislave_register_device(struct spislave_device *sdev)
+{
+	int			ret = 0;
+
+	sdev->dev.bus = &spislave_bus_type;
+	dev_set_name(&sdev->dev, "%s", sdev->name);
+
+	ret = device_register(&sdev->dev);
+
+	if (ret) {
+		pr_err("%s: Failed to register device\n", DRIVER_NAME);
+		return 0;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(spislave_register_device);
+
+void spislave_unregister_device(struct spislave_device *sdev)
+{
+	device_unregister(&sdev->dev);
+}
+EXPORT_SYMBOL_GPL(spislave_unregister_device);
+
 static int spislave_device_match(struct device *dev,
 				 struct device_driver *drv)
 {
