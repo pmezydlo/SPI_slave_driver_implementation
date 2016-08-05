@@ -42,20 +42,15 @@ struct spi_slave {
 };
 
 struct spislave_driver {
-	struct module			*module;
+	int				(*probe)(struct spi_slave *spi);
+	int				(*remove)(struct spi_slave *spi);
 	struct device_driver		driver;
-};
-
-struct spislave_device {
-	char				name[SPISLAVE_NAME_SIZE];
-	struct device			dev;
-	unsigned int			id;
 };
 
 extern int spislave_register_driver(struct spislave_driver *sdrv);
 extern void spislave_unregister_driver(struct spislave_driver *sdrv);
 extern int devm_spislave_register_device(struct device *dev, const char *name,
 				  struct spi_slave *slave);
-extern void spislave_unregister_device(struct spislave_device *sdev);
+extern void spislave_unregister_device(struct spi_slave *slave);
 
 #endif

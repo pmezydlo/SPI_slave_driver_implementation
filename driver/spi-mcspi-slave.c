@@ -783,6 +783,8 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
+	spislave_unregister_device(slave);
+
 	mcspi_slave_clean_up(slave);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);

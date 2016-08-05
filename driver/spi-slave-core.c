@@ -8,10 +8,27 @@
 #include "spi-slave-core.h"
 #define DRIVER_NAME "spislavecore"
 
+static int spislave_drv_probe(struct device *dev)
+{
+	int			ret = 0;
+
+	return ret;
+}
+
+static int spislave_drv_remove(struct device *dev)
+{
+	int			ret = 0;
+
+	return ret;
+}
+
 int spislave_register_driver(struct spislave_driver *sdrv)
 {
 	sdrv->driver.owner = THIS_MODULE;
 	sdrv->driver.bus = &spislave_bus_type;
+
+	sdrv->driver.probe = spislave_drv_probe;
+	sdrv->driver.remove = spislave_drv_remove;
 
 	return driver_register(&sdrv->driver);
 }
@@ -71,9 +88,9 @@ int devm_spislave_register_device(struct device *dev, const char *name,
 EXPORT_SYMBOL_GPL(devm_spislave_register_device);
 
 
-void spislave_unregister_device(struct spislave_device *sdev)
+void spislave_unregister_device(struct spi_slave *slave)
 {
-	device_unregister(&sdev->dev);
+	device_unregister(&slave->dev);
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_device);
 
