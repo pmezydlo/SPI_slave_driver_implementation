@@ -21,7 +21,6 @@
 
 #include <linux/platform_data/spi-omap2-mcspi.h>
 
-#include "spi-slave-dev.h"
 #include "spi-slave-core.h"
 
 #define MCSPI_PIN_DIR_D0_IN_D1_OUT		0
@@ -59,24 +58,9 @@
 #define MCSPI_CH0CTRL				0x34
 #define MCSPI_TX0				0x38
 #define MCSPI_RX0				0x3C
-#define MCSPI_CH1CONF				0x40
-#define MCSPI_CH1STAT				0x44
-#define MCSPI_CH1CTRL				0x48
-#define MCSPI_TX1				0x4C
-#define MCSPI_RX1				0x50
-#define MCSPI_CH2CONF				0x54
-#define MCSPI_CH2STAT				0x58
-#define MCSPI_CH2CTRL				0x5C
-#define MCSPI_TX2				0x60
-#define MCSPI_RX2				0x64
-#define MCSPI_CH3CONF				0x68
-#define MCSPI_CH3STAT				0x6C
-#define MCSPI_CH3CTRL				0x70
-#define MCSPI_TX3				0x74
-#define MCSPI_RX3				0x78
 #define MCSPI_XFERLEVEL				0x7C
 #define MCSPI_DAFTX				0x80
-#define MCSPI_DAFRX				0xA0
+#define	MCSPI_DAFRX				0xA0
 
 #define SPI_AUTOSUSPEND_TIMEOUT			-1
 
@@ -133,14 +117,6 @@
 #define MCSPI_CHSTAT_TXFFF			BIT(4)
 #define MCSPI_CHSTAT_TXFFE			BIT(3)
 
-#define SPISLAVE_MAJOR				154
-#define N_SPI_MINORS				32
-
-static						DECLARE_BITMAP(minors,
-							       N_SPI_MINORS);
-static						LIST_HEAD(device_list);
-static struct class				*spislave_class;
-
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
 	return ioread32(base + idx);
@@ -187,7 +163,6 @@ static void mcspi_slave_enable(struct spi_slave *slave)
 	pr_info("%s: spi is enabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
 
-	/*set bit(0) in ch0ctrl, spi is enabled*/
 	l |= MCSPI_CHCTRL_EN;
 	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
 
@@ -201,7 +176,6 @@ static void mcspi_slave_disable(struct spi_slave *slave)
 	pr_info("%s: spi is disabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
 
-	/*clr bit(0) in ch0ctrl, spi is enabled*/
 	l &= ~MCSPI_CHCTRL_EN;
 	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
 
@@ -283,8 +257,7 @@ out:
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
-static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave,
-					unsigned int length)
+static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 {
 	unsigned int				c;
 	void __iomem				*tx_reg;
@@ -380,7 +353,6 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 		tasklet_schedule(&pio_rx_tasklet);
 	}
 
-	/*clear IRQSTATUS register*/
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
 
 	return (irq_handler_t) IRQ_HANDLED;
@@ -447,14 +419,9 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l &= ~MCSPI_XFER_AEL;
 	l &= ~MCSPI_XFER_AFL;
 
-	/*
-	 * set maximum receive and transmit byte
-	 * when mcspi generating interrupt
-	 */
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
 		l  |= (slave->bytes_per_load - 1) << 8;
 
-	/*enable word counter*/
 	l &= ~MCSPI_XFER_WCNT;
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
@@ -463,10 +430,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
-	/*
-	 * clr bit(13 and 12) in chconf,
-	 * spi is set in transmit and receive mode
-	 */
 	l &= ~MCSPI_CHCONF_TRM;
 
 	if (slave->mode == MCSPI_MODE_RM)
@@ -474,10 +437,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	else if (slave->mode == MCSPI_MODE_TM)
 		l |= MCSPI_CHCONF_TM;
 
-	/*
-	 * available is only form 4 bits to 32 bits per word
-	 * before setting clear all WL bits
-	 */
 	l &= ~MCSPI_CHCONF_WL;
 	l |= (slave->bits_per_word - 1) << 7;
 
@@ -496,9 +455,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
 	l &= ~MCSPI_MODULCTRL_FDAA;
-
-	/*multiple word ocp access*/
-	/*l |= MCSPI_MODULCTRL_MOA;*/
 
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
@@ -531,7 +487,6 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
-	/*set bit(2) in modulctrl, spi is set in slave mode*/
 	l |= MCSPI_MODULCTRL_MS;
 
 	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
@@ -543,7 +498,6 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	l &= ~MCSPI_CHCONF_PHA;
 	l &= ~MCSPI_CHCONF_POL;
 
-	/*setting a line which is selected for reception */
 	if (slave->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
 		l &= ~MCSPI_CHCONF_IS;
 		l &= ~MCSPI_CHCONF_DPE1;
@@ -576,12 +530,6 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
-	/*cs polatiry
-	 * when cs_polarity is 0: MCSPI is enabled when cs line is 0
-	 * (set EPOL bit)
-	 * when cs_polarity is 1: MCSPI is enabled when cs line is 1
-	 * (clr EPOL bit)
-	 */
 	if (slave->cs_polarity == MCSPI_CS_POLARITY_ACTIVE_LOW)
 		l |= MCSPI_CHCONF_EPOL;
 	else
@@ -590,11 +538,7 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
-	/*
-	 * set bit(1) in modulctrl, spi wtihout cs line, only enabled
-	 * clear bit(1) in modulctrl, spi with cs line,
-	 * enable if cs is set
-	 */
+
 	if (slave->cs_sensitive == MCSPI_CS_SENSITIVE_ENABLED)
 		l &= ~MCSPI_MODULCTRL_PIN34;
 	else
@@ -611,7 +555,6 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 
 	pr_info("%s: slave setup\n", DRIVER_NAME);
 
-	/*verification status bit(0) in MCSPI system status register*/
 	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
 
 	pr_info("%s: MCSPI_SYSSTATUS:0x%x\n", DRIVER_NAME, l);
@@ -622,7 +565,6 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		pr_info("%s: controller ready for setting\n",
 			DRIVER_NAME);
 
-		/*here set mcspi controller in slave mode and more setting*/
 		mcspi_slave_disable(slave);
 		mcspi_slave_set_slave_mode(slave);
 		mcspi_slave_set_cs(slave);
@@ -654,7 +596,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	kfree(slave);
 }
 
- /* default platform value located in .h file*/
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_REG_OFFSET,
 };
@@ -690,11 +631,10 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pha;
 	unsigned int					pol;
 
-	unsigned long					minor;
-
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
 	node = pdev->dev.of_node;
+
 
 	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
 
@@ -703,7 +643,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
-	if (match) {/* user setting from dts*/
+	if (match) {
 		pdata = match->data;
 
 		if (of_get_property(node, "cs_polarity", &cs_polarity))
@@ -747,7 +687,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	/*copy resources because base address is changed*/
 	memcpy(&cp_res, res, sizeof(struct resource));
 
 	if (res == NULL) {
@@ -756,10 +695,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
-	/* driver is increment allways when omap2 driver is install
-	 * base addres is not correct when install a driver more times
-	 * but when resources is copied it's ok
-	 */
 	cp_res.start += regs_offset;
 	cp_res.end   += regs_offset;
 
@@ -781,11 +716,16 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->irq			= irq;
 	slave->pol			= pol;
 	slave->pha			= pha;
-	/*default setting when user dosn't get your setting*/
 	slave->mode			= SPI_SLAVE_MODE;
 	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
 	slave->bytes_per_load		= SPI_SLAVE_COPY_LENGTH;
 	slave->bits_per_word		= SPI_SLAVE_BITS_PER_WORD;
+
+	slave->enable = mcspi_slave_enable;
+	slave->disable = mcspi_slave_disable;
+	slave->set_transfer = mcspi_slave_setup_pio_transfer;
+	slave->clr_transfer = mcspi_slave_clr_pio_transfer;
+	slave->transfer = mcspi_slave_pio_tx_transfer;
 
 	platform_set_drvdata(pdev, slave);
 
@@ -845,9 +785,6 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	mcspi_slave_clean_up(slave);
 
-	list_del(&slave->device_entry);
-	device_destroy(spislave_class, slave->devt);
-
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
@@ -865,265 +802,7 @@ static struct platform_driver mcspi_slave_driver = {
 	},
 };
 
-static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
-			     loff_t *f_pos)
-{
-	struct spi_slave			*slave;
-	int					error_count = 0;
-
-	slave = flip->private_data;
-	pr_info("%s: read begin\n", DRIVER_NAME);
-
-	if (slave->rx == NULL) {
-		pr_err("%s: slave->rx pointer is NULL\n", DRIVER_NAME);
-		return -ENOMEM;
-	}
-
-	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
-
-	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
-		error_count, slave->rx_offset);
-
-	/*after read clear receive buffer*/
-	slave->rx_offset = 0;
-	memset(slave->rx, 0, slave->buf_depth);
-
-	if (error_count == 0)
-		return 0;
-	else
-		return -EFAULT;
-}
-
-static ssize_t spislave_write(struct file *flip, const char __user *buf,
-			      size_t count, loff_t *f_pos)
-{
-	ssize_t					ret = 0;
-	struct spi_slave			*slave;
-	unsigned long				missing;
-
-	slave = flip->private_data;
-
-	if (slave->tx == NULL) {
-		pr_err("%s: slave->tx pointer is NULL\n", DRIVER_NAME);
-		return -ENOMEM;
-	}
-
-	memset(slave->tx, 0, slave->buf_depth);
-
-	if (count > MCSPI_MAX_FIFO_DEPTH/2) {
-		pr_err("%s: message is too long!!!\n", DRIVER_NAME);
-		return -EFAULT;
-	}
-
-	missing = copy_from_user(slave->tx, buf, count);
-
-	if (missing == 0)
-		ret = count;
-	else
-		return -EFAULT;
-
-
-	pr_info("%s: write count:%d\n", DRIVER_NAME, count);
-	slave->tx_offset = 0;
-	mcspi_slave_enable(slave);
-	mcspi_slave_pio_tx_transfer(slave, count);
-
-	return ret;
-}
-
-static int spislave_release(struct inode *inode, struct file *filp)
-{
-	int					ret = 0;
-	struct spi_slave			*slave;
-
-	slave = filp->private_data;
-	filp->private_data = NULL;
-
-	mcspi_slave_clr_pio_transfer(slave);
-
-	slave->users--;
-
-	pr_info("%s: release\n", DRIVER_NAME);
-	return ret;
-}
-
-static int spislave_open(struct inode *inode, struct file *filp)
-{
-	int					ret = -ENXIO;
-	struct spi_slave			*slave;
-
-	list_for_each_entry(slave, &device_list, device_entry) {
-		if (slave->devt == inode->i_rdev) {
-			ret = 0;
-			break;
-		}
-	}
-
-	slave->users++;
-	filp->private_data = slave;
-	nonseekable_open(inode, filp);
-	init_waitqueue_head(&slave->wait);
-
-	pr_info("%s: open\n", DRIVER_NAME);
-	return ret;
-}
-
-static long spislave_ioctl(struct file *filp, unsigned int cmd,
-			   unsigned long arg)
-{
-	int					ret = 0;
-	int					err = 0;
-	struct spi_slave			*slave;
-
-	if (_IOC_TYPE(cmd) != SPISLAVE_IOC_MAGIC)
-		return -ENOTTY;
-
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE,
-				 (void __user *)arg, _IOC_SIZE(cmd));
-
-	if (err == 0 && _IOC_DIR(cmd) & _IOC_WRITE)
-		err = !access_ok(VERIFY_WRITE,
-				 (void __user *)arg, _IOC_SIZE(cmd));
-
-	if (err)
-		return -EFAULT;
-
-	slave = filp->private_data;
-
-	switch (cmd) {
-	case SPISLAVE_RD_TX_OFFSET:
-		ret = __put_user(slave->tx_offset, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_RD_RX_OFFSET:
-		ret = __put_user(slave->rx_offset, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_RD_BITS_PER_WORD:
-		ret = __put_user(slave->bits_per_word, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_RD_BYTES_PER_LOAD:
-		ret = __put_user(slave->bytes_per_load, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_RD_MODE:
-		ret = __put_user(slave->mode, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_RD_BUF_DEPTH:
-		ret = __put_user(slave->buf_depth, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_ENABLED:
-		mcspi_slave_enable(slave);
-		break;
-
-	case SPISLAVE_DISABLED:
-		mcspi_slave_disable(slave);
-		break;
-
-	case SPISLAVE_SET_TRANSFER:
-		mcspi_slave_setup_pio_transfer(slave);
-		break;
-
-	case SPISLAVE_CLR_TRANSFER:
-		mcspi_slave_clr_pio_transfer(slave);
-		break;
-
-	case SPISLAVE_WR_BITS_PER_WORD:
-		ret = __get_user(slave->bits_per_word, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_WR_MODE:
-		ret = __get_user(slave->mode, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_WR_BUF_DEPTH:
-		ret = __get_user(slave->buf_depth, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_WR_BYTES_PER_LOAD:
-		ret = __get_user(slave->bytes_per_load, (__u32 __user *)arg);
-		break;
-
-	default:
-
-		break;
-	}
-	return ret;
-}
-
-static unsigned int spislave_event_poll(struct file *filp,
-					struct poll_table_struct *wait)
-{
-	struct spi_slave			*slave;
-	unsigned int				events = 0;
-
-	slave = filp->private_data;
-
-	if (slave == NULL) {
-		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
-		return -EFAULT;
-	}
-
-	poll_wait(filp, &slave->wait, wait);
-	if (slave->rx_offset != 0)
-		events = POLLIN | POLLRDNORM;
-
-	pr_info("%s: POLL method end!!\n", DRIVER_NAME);
-
-	return events;
-}
-
-static const struct file_operations spislave_fops = {
-	.owner		= THIS_MODULE,
-	.open		= spislave_open,
-	.read		= spislave_read,
-	.write		= spislave_write,
-	.release	= spislave_release,
-	.unlocked_ioctl = spislave_ioctl,
-	.poll		= spislave_event_poll,
-};
-
-static int __init mcspi_slave_init(void)
-{
-	int					ret = 0;
-
-	pr_info("%s: init\n", DRIVER_NAME);
-
-	BUILD_BUG_ON(N_SPI_MINORS > 256);
-
-	ret = register_chrdev(SPISLAVE_MAJOR, "spi", &spislave_fops);
-	if (ret < 0)
-		return ret;
-
-	spislave_class = class_create(THIS_MODULE, DRIVER_NAME);
-	if (IS_ERR(spislave_class)) {
-		unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
-		return PTR_ERR(spislave_class);
-	}
-
-	ret = platform_driver_register(&mcspi_slave_driver);
-	if (ret < 0)
-		pr_err("%s: platform driver error\n", DRIVER_NAME);
-
-	return ret;
-}
-
-static void __exit mcspi_slave_exit(void)
-{
-	platform_driver_unregister(&mcspi_slave_driver);
-	class_unregister(spislave_class);
-	class_destroy(spislave_class);
-	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
-
-	pr_info("%s: exit\n", DRIVER_NAME);
-}
-
-module_init(mcspi_slave_init);
-module_exit(mcspi_slave_exit);
+module_platform_driver(mcspi_slave_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");

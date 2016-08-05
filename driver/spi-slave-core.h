@@ -6,7 +6,6 @@
 extern struct bus_type spislave_bus_type;
 
 struct spi_slave {
-	/*var defining device parameters*/
 	struct	device				dev;
 	void	__iomem				*base;
 	u32					start;
@@ -15,34 +14,31 @@ struct spi_slave {
 	s16					bus_num;
 	char					name[SPISLAVE_NAME_SIZE];
 
-	/*var defining cs and pin direct parameters*/
 	unsigned int				pin_dir;
 	u32					cs_sensitive;
 	u32					cs_polarity;
 	unsigned int				pha;
 	unsigned int				pol;
 
-	/*var defining interrupt*/
 	unsigned int				irq;
 
-	/*var defining msg */
 	u32					tx_offset;
 	u32					rx_offset;
 	void  __iomem				*tx;
 	void  __iomem				*rx;
 
-	/*var defining the char driver parameters*/
-	char					modalias[SPI_NAME_SIZE];
-	dev_t					devt;
-	struct	list_head			device_entry;
-	unsigned int				users;
-	wait_queue_head_t			wait;
-
-	/*var defining the transfer parameters*/
 	u32					mode;
 	u32					bytes_per_load;
 	u32					bits_per_word;
 	u32					buf_depth;
+
+	wait_queue_head_t			wait;
+
+	void			(*enable)(struct spi_slave *slave);
+	void			(*disable)(struct spi_slave *slave);
+	int			(*set_transfer)(struct spi_slave *slave);
+	int			(*clr_transfer)(struct spi_slave *slave);
+	void			(*transfer)(struct spi_slave *slave);
 };
 
 struct spislave_driver {
