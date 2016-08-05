@@ -310,8 +310,8 @@ static int __init spislave_init(void)
 
 	ret = spislave_register_driver(&slave_driver);
 	if (ret) {
-	        class_unregister(spislave_class);
-	        class_destroy(spislave_class);
+		class_unregister(spislave_class);
+		class_destroy(spislave_class);
 
 		return ret;
 	}
