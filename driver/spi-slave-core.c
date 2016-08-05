@@ -23,23 +23,53 @@ void spislave_unregister_driver(struct spislave_driver *sdrv)
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_driver);
 
-int spislave_register_device(struct spislave_device *sdev)
+void spislave_unregister_slave(struct spi_slave *slave)
+{
+	device_unregister(&slave->dev);
+}
+
+static void devm_spislave_unregister(struct device *dev, void *res)
+{
+	spislave_unregister_slave(*(struct spi_slave **)res);
+}
+
+int spislave_register_slave(struct spi_slave *slave)
+{
+	int ret = 0;
+
+	slave->dev.bus = &spislave_bus_type;
+	dev_set_name(&slave->dev, "%s", slave->name);
+	ret = device_register(&slave->dev);
+
+	return ret;
+}
+
+int devm_spislave_register_device(struct device *dev, const char *name,
+				  struct spi_slave *slave)
 {
 	int			ret = 0;
+	struct spi_slave	**ptr;
 
-	sdev->dev.bus = &spislave_bus_type;
-	dev_set_name(&sdev->dev, "%s", sdev->name);
+	ptr = devres_alloc(devm_spislave_unregister, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr) {
+		pr_err("%s: devers alloc error\n", DRIVER_NAME);
+		return -ENOMEM;
+	}
 
-	ret = device_register(&sdev->dev);
+	pr_info("%s: devres alloc ok\n", DRIVER_NAME);
 
-	if (ret) {
-		pr_err("%s: Failed to register device\n", DRIVER_NAME);
-		return 0;
+	ret = spislave_register_slave(slave);
+	if (!ret) {
+		*ptr = slave;
+		devres_add(dev, ptr);
+	} else {
+		devres_free(ptr);
 	}
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(spislave_register_device);
+EXPORT_SYMBOL_GPL(devm_spislave_register_device);
+
 
 void spislave_unregister_device(struct spislave_device *sdev)
 {

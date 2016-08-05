@@ -141,45 +141,6 @@ static						DECLARE_BITMAP(minors,
 static						LIST_HEAD(device_list);
 static struct class				*spislave_class;
 
-struct spi_slave {
-	/*var defining device parameters*/
-	struct	device				*dev;
-	void	__iomem				*base;
-	u32					start;
-	u32					end;
-	unsigned int				reg_offset;
-	s16					bus_num;
-
-	/*var defining cs and pin direct parameters*/
-	unsigned int				pin_dir;
-	u32					cs_sensitive;
-	u32					cs_polarity;
-	unsigned int				pha;
-	unsigned int				pol;
-
-	/*var defining interrupt*/
-	unsigned int				irq;
-
-	/*var defining msg */
-	u32					tx_offset;
-	u32					rx_offset;
-	void  __iomem				*tx;
-	void  __iomem				*rx;
-
-	/*var defining the char driver parameters*/
-	char					modalias[SPI_NAME_SIZE];
-	dev_t					devt;
-	struct	list_head			device_entry;
-	unsigned int				users;
-	wait_queue_head_t			wait;
-
-	/*var defining the transfer parameters*/
-	u32					mode;
-	u32					bytes_per_load;
-	u32					bits_per_word;
-	u32					buf_depth;
-};
-
 static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
 	return ioread32(base + idx);
@@ -444,7 +405,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
 
-	ret = devm_request_irq(slave->dev, slave->irq,
+	ret = devm_request_irq(&slave->dev, slave->irq,
 				(irq_handler_t)mcspi_slave_irq,
 				IRQF_TRIGGER_NONE,
 				DRIVER_NAME, slave);
@@ -709,7 +670,6 @@ MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
 static int mcspi_slave_probe(struct platform_device *pdev)
 {
-	struct device					*dev;
 	struct device_node				*node;
 
 	struct resource					*res;
@@ -731,19 +691,17 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int					pol;
 
 	unsigned long					minor;
-	struct spislave_device				slave_dev;
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
-	dev  = &pdev->dev;
-	node = dev->of_node;
+	node = pdev->dev.of_node;
 
 	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
 
 	if (slave == NULL)
 		return -ENOMEM;
 
-	match = of_match_device(mcspi_slave_of_match, dev);
+	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
 	if (match) {/* user setting from dts*/
 		pdata = match->data;
@@ -813,7 +771,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
-	slave->dev			= dev;
+	slave->dev.of_node		= node;
 	slave->cs_polarity		= cs_polarity;
 	slave->start			= cp_res.start;
 	slave->end			= cp_res.end;
@@ -842,59 +800,37 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	pr_info("%s: pol=%d\n", DRIVER_NAME, slave->pol);
 	pr_info("%s: pha=%d\n", DRIVER_NAME, slave->pha);
 
-	pm_runtime_use_autosuspend(slave->dev);
-	pm_runtime_set_autosuspend_delay(slave->dev, SPI_AUTOSUSPEND_TIMEOUT);
-	pm_runtime_enable(slave->dev);
+	pm_runtime_use_autosuspend(&pdev->dev);
+	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
+	pm_runtime_enable(&pdev->dev);
 
-	ret = pm_runtime_get_sync(slave->dev);
+	ret = pm_runtime_get_sync(&pdev->dev);
+
 	if (ret < 0)
 		goto disable_pm;
+
+	sprintf(slave->name, "%s%d", DRIVER_NAME, slave->bus_num);
+	ret = devm_spislave_register_device(&pdev->dev, slave->name, slave);
+
+	if (ret) {
+		pr_err("%s: register device error\n", DRIVER_NAME);
+		goto disable_pm;
+	}
 
 	ret = mcspi_slave_setup(slave);
 	if (ret < 0)
 		goto disable_pm;
 
-	INIT_LIST_HEAD(&slave->device_entry);
-
-	minor = find_first_zero_bit(minors, N_SPI_MINORS);
-
-	if (minor < N_SPI_MINORS) {
-		struct device *dev;
-
-		slave->devt = MKDEV(SPISLAVE_MAJOR, minor);
-		dev = device_create(spislave_class, slave->dev,
-				    slave->devt, slave, "spislave%d",
-				    slave->bus_num);
-
-		ret = PTR_ERR_OR_ZERO(dev);
-	} else {
-		pr_err("%s: no minor number available!!\n",
-		       DRIVER_NAME);
-		ret = -ENODEV;
-	}
-
-	if (ret == 0) {
-		set_bit(minor, minors);
-		list_add(&slave->device_entry, &device_list);
-	}
-
-	slave_dev.dev.parent = slave->dev;
-	slave_dev.dev.of_node = node;
-	sprintf(slave_dev.name, "%s%d\n", DRIVER_NAME, slave->bus_num);
-	ret = spislave_register_device(&slave_dev);
-	if (ret)
-		goto disable_pm;
-
 	return ret;
 
 disable_pm:
-	pm_runtime_dont_use_autosuspend(slave->dev);
-	pm_runtime_put_sync(slave->dev);
-	pm_runtime_disable(slave->dev);
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	pm_runtime_put_sync(&pdev->dev);
+	pm_runtime_disable(&pdev->dev);
 
 free_slave:
 	if (slave != NULL) {
-		put_device(slave->dev);
+		put_device(&slave->dev);
 		mcspi_slave_clean_up(slave);
 	}
 
