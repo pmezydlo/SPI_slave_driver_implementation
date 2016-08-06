@@ -4,13 +4,26 @@
 #include <linux/of_device.h>
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/pm_domain.h>
 
 #include "spi-slave-core.h"
 #define DRIVER_NAME "spislavecore"
 
 static int spislave_drv_probe(struct device *dev)
 {
-	int			ret = 0;
+	int				ret = 0;
+	const struct spislave_driver	*sdrv;
+	struct spi_slave		*sdev;
+
+	sdrv = to_spislave_drv(dev->driver);
+	sdev = to_spislave_dev(dev);
+
+	ret = dev_pm_domain_attach(dev, true);
+	if (ret != -EPROBE_DEFER) {
+		ret = sdrv->probe(sdev);
+		if (ret)
+			dev_pm_domain_detach(dev, true);
+	}
 
 	return ret;
 }
@@ -18,6 +31,14 @@ static int spislave_drv_probe(struct device *dev)
 static int spislave_drv_remove(struct device *dev)
 {
 	int			ret = 0;
+	const struct spislave_driver	*sdrv;
+	struct spi_slave		*sdev;
+
+	sdrv = to_spislave_drv(dev->driver);
+	sdev = to_spislave_dev(dev);
+
+	ret = sdrv->remove(sdev);
+	dev_pm_domain_detach(dev, true);
 
 	return ret;
 }
@@ -97,7 +118,18 @@ EXPORT_SYMBOL_GPL(spislave_unregister_device);
 static int spislave_device_match(struct device *dev,
 				 struct device_driver *drv)
 {
+	struct device_node			*nc;
+
 	pr_info("%s: device match", DRIVER_NAME);
+
+	for_each_available_child_of_node(dev->of_node, nc) {
+		if (of_node_test_and_set_flag(nc, OF_POPULATED))
+			continue;
+
+		pr_info("%s: chid node is found: %s\n", DRIVER_NAME,
+			nc->full_name);
+	}
+
 	return 1;
 }
 

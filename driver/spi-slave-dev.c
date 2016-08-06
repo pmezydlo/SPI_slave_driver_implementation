@@ -284,9 +284,16 @@ static int spislave_remove(struct spi_slave *slave)
 	return ret;
 }
 
+static const struct of_device_id spislave_dt_ids[] = {
+	{ .compatible = "linux,spislave"},
+	{},
+};
+MODULE_DEVICE_TABLE(of, spislave_dt_ids);
+
 static struct spislave_driver slave_driver = {
 	.driver = {
 		.name = DRIVER_NAME,
+		.of_match_table = of_match_ptr(spislave_dt_ids),
 	},
 	.probe = spislave_probe,
 	.remove = spislave_remove,

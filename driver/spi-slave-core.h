@@ -41,7 +41,14 @@ struct spi_slave {
 	void			(*transfer)(struct spi_slave *slave);
 };
 
+struct spislave_device_id {
+	char			name[SPISLAVE_NAME_SIZE];
+	kernel_ulong_t		driver_data;
+
+};
+
 struct spislave_driver {
+	const struct spislave_device_id *id_table;
 	int				(*probe)(struct spi_slave *spi);
 	int				(*remove)(struct spi_slave *spi);
 	struct device_driver		driver;
@@ -52,5 +59,15 @@ extern void spislave_unregister_driver(struct spislave_driver *sdrv);
 extern int devm_spislave_register_device(struct device *dev, const char *name,
 				  struct spi_slave *slave);
 extern void spislave_unregister_device(struct spi_slave *slave);
+
+static inline struct spi_slave *to_spislave_dev(struct device *dev)
+{
+	return dev ? container_of(dev, struct spi_slave, dev) : NULL;
+}
+
+static inline struct spislave_driver *to_spislave_drv(struct device_driver *drv)
+{
+	return drv ? container_of(drv, struct spislave_driver, driver) : NULL;
+}
 
 #endif
