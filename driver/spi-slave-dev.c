@@ -266,7 +266,7 @@ static const struct file_operations spislave_fops = {
 	.poll		= spislave_event_poll,
 };
 
-static int spislave_probe(struct spi_slave *slave)
+static int spislave_probe(struct spislave_device *dev)
 {
 	int			ret = 0;
 
@@ -275,7 +275,7 @@ static int spislave_probe(struct spi_slave *slave)
 	return ret;
 }
 
-static int spislave_remove(struct spi_slave *slave)
+static int spislave_remove(struct spislave_device *dev)
 {
 	int			ret = 0;
 

@@ -593,7 +593,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 	if (slave->rx != NULL)
 		kfree(slave->rx);
 
-	kfree(slave);
 }
 
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
@@ -611,8 +610,6 @@ MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
 static int mcspi_slave_probe(struct platform_device *pdev)
 {
-	struct device_node				*node;
-
 	struct resource					*res;
 	struct resource					cp_res;
 	const struct of_device_id			*match;
@@ -633,10 +630,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
-	node = pdev->dev.of_node;
-
-
-	slave = kzalloc(sizeof(struct spi_slave), GFP_KERNEL);
+	slave = devm_kzalloc(&pdev->dev, sizeof(struct spi_slave), GFP_KERNEL);
 
 	if (slave == NULL)
 		return -ENOMEM;
@@ -646,33 +640,33 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (match) {
 		pdata = match->data;
 
-		if (of_get_property(node, "cs_polarity", &cs_polarity))
+		if (of_get_property(pdev->dev.of_node, "cs_polarity", &cs_polarity))
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
 		else
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_LOW;
 
-		if (of_get_property(node, "cs_sensitive", &cs_sensitive))
+		if (of_get_property(pdev->dev.of_node, "cs_sensitive", &cs_sensitive))
 			cs_sensitive = MCSPI_CS_SENSITIVE_DISABLED;
 		else
 			cs_sensitive = MCSPI_CS_SENSITIVE_ENABLED;
 
-		if (of_get_property(node, "pindir-D0-out-D1-in", &pin_dir))
+		if (of_get_property(pdev->dev.of_node, "pindir-D0-out-D1-in", &pin_dir))
 			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
 		else
 			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
 
-		if (of_get_property(node, "pha", &pha))
+		if (of_get_property(pdev->dev.of_node, "pha", &pha))
 			pha = MCSPI_PHA_EVEN_NUMBERED_EDGES;
 		else
 			pha = MCSPI_PHA_ODD_NUMBERED_EDGES;
 
-		if (of_get_property(node, "pol", &pol))
+		if (of_get_property(pdev->dev.of_node, "pol", &pol))
 			pol = MCSPI_POL_HELD_LOW;
 		else
 			pol = MCSPI_POL_HELD_HIGH;
 
 
-		irq = irq_of_parse_and_map(node, 0);
+		irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 
 		slave->bus_num = bus_num++;
 
@@ -706,7 +700,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
-	slave->dev.of_node		= node;
 	slave->cs_polarity		= cs_polarity;
 	slave->start			= cp_res.start;
 	slave->end			= cp_res.end;
@@ -727,7 +720,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->clr_transfer = mcspi_slave_clr_pio_transfer;
 	slave->transfer = mcspi_slave_pio_tx_transfer;
 
-	platform_set_drvdata(pdev, slave);
+	//platform_set_drvdata(pdev, slave);
+	//TODO:it requires set data to device
 
 	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
 	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
@@ -750,7 +744,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto disable_pm;
 
 	sprintf(slave->name, "%s%d", DRIVER_NAME, slave->bus_num);
-	ret = devm_spislave_register_device(&pdev->dev, slave->name, slave);
+	ret = spislave_register_device(&pdev->dev, slave->name, slave,
+					    pdev->dev.of_node);
 
 	if (ret) {
 		pr_err("%s: register device error\n", DRIVER_NAME);
@@ -783,7 +778,7 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
-	spislave_unregister_device(slave);
+	/*spislave_unregister_device(slave);*/
 
 	mcspi_slave_clean_up(slave);
 
