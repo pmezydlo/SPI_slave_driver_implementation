@@ -630,7 +630,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	pr_info("%s: Entry probe\n", DRIVER_NAME);
 
-	slave = devm_kzalloc(&pdev->dev, sizeof(struct spi_slave), GFP_KERNEL);
+	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spi_slave));
 
 	if (slave == NULL)
 		return -ENOMEM;
@@ -640,17 +640,20 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (match) {
 		pdata = match->data;
 
-		if (of_get_property(pdev->dev.of_node, "cs_polarity", &cs_polarity))
+		if (of_get_property(pdev->dev.of_node, "cs_polarity",
+				    &cs_polarity))
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
 		else
 			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_LOW;
 
-		if (of_get_property(pdev->dev.of_node, "cs_sensitive", &cs_sensitive))
+		if (of_get_property(pdev->dev.of_node, "cs_sensitive",
+				    &cs_sensitive))
 			cs_sensitive = MCSPI_CS_SENSITIVE_DISABLED;
 		else
 			cs_sensitive = MCSPI_CS_SENSITIVE_ENABLED;
 
-		if (of_get_property(pdev->dev.of_node, "pindir-D0-out-D1-in", &pin_dir))
+		if (of_get_property(pdev->dev.of_node, "pindir-D0-out-D1-in",
+				    &pin_dir))
 			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
 		else
 			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
@@ -713,6 +716,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
 	slave->bytes_per_load		= SPI_SLAVE_COPY_LENGTH;
 	slave->bits_per_word		= SPI_SLAVE_BITS_PER_WORD;
+	slave->dev.of_node		= pdev->dev.of_node;
 
 	slave->enable = mcspi_slave_enable;
 	slave->disable = mcspi_slave_disable;
@@ -720,8 +724,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->clr_transfer = mcspi_slave_clr_pio_transfer;
 	slave->transfer = mcspi_slave_pio_tx_transfer;
 
-	//platform_set_drvdata(pdev, slave);
-	//TODO:it requires set data to device
+	platform_set_drvdata(pdev, slave);
 
 	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
 	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
@@ -743,9 +746,12 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
-	sprintf(slave->name, "%s%d", DRIVER_NAME, slave->bus_num);
-	ret = spislave_register_device(&pdev->dev, slave->name, slave,
-					    pdev->dev.of_node);
+	/*
+	 *
+	 * ret = spislave_register_device(&pdev->dev, slave->name, slave,
+	 *
+	 * pdev->dev.of_node);
+	 */
 
 	if (ret) {
 		pr_err("%s: register device error\n", DRIVER_NAME);

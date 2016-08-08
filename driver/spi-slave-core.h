@@ -48,7 +48,7 @@ struct spislave_device_id {
 
 struct spislave_device {
 	struct device                   dev;
-        struct spi_slave                *slave;
+	struct spi_slave		*slave;
 	char				modalias[SPISLAVE_NAME_SIZE];
 };
 
@@ -67,6 +67,16 @@ extern int spislave_register_device(struct device *dev, const char *name,
 					  struct device_node *node);
 
 extern void spislave_unregister_device(struct spislave_device *dev);
+
+extern inline void *spislave_get_drv_data(struct spislave_device *sdev);
+extern inline void spislave_set_drv_data(struct spislave_device *sdev,
+					    void *data);
+extern inline void *spislave_get_slave_data(struct spi_slave *slave);
+extern inline void spislave_set_slave_data(struct spi_slave *slave,
+					    void *data);
+
+extern struct spi_slave *spislave_alloc_slave(struct device *dev,
+					      unsigned size);
 
 static inline struct spislave_device *to_spislave_dev(struct device *dev)
 {

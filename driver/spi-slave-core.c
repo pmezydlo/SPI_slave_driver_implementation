@@ -62,16 +62,18 @@ void spislave_unregister_driver(struct spislave_driver *sdrv)
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_driver);
 
-static inline void *spislave_get_drv_data(struct spislave_device *sdev)
+inline void *spislave_get_drv_data(struct spislave_device *sdev)
 {
 	return dev_get_drvdata(&sdev->dev);
 }
+EXPORT_SYMBOL_GPL(spislave_get_drv_data);
 
-static inline void spislave_set_drv_data(struct spislave_device *sdev,
+inline void spislave_set_drv_data(struct spislave_device *sdev,
 					    void *data)
 {
 	dev_set_drvdata(&sdev->dev, data);
 }
+EXPORT_SYMBOL_GPL(spislave_set_drv_data);
 
 /*============================================================================*/
 void spislave_unregister_pdev(struct spi_slave *slave)
@@ -84,26 +86,46 @@ static void devm_spislave_unregister_pdev(struct device *dev, void *res)
 	spislave_unregister_pdev(*(struct spi_slave **)res);
 }
 
-int spislave_register_device(struct device *dev, const char *name,
-				  struct spi_slave *slave,
-				  struct device_node *node)
+static void spislave_release(struct device *dev)
 {
-	int					ret = 0;
-	struct spi_slave			**ptr;
-	struct device_node			*nc;
-	struct spislave_device			*slave_dev;
+	struct spi_slave *slave;
 
-	pr_info("%s: register device and driver start\n", DRIVER_NAME);
+	slave = container_of(dev, struct spi_slave, dev);
+	kfree(slave);
+}
+
+static struct class spislave_class = {
+	.name = "spi_slave",
+	.owner = THIS_MODULE,
+	.dev_release = spislave_release,
+};
+
+struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned size)
+{
+	struct spi_slave		*slave;
+	struct spi_slave		**ptr;
+	int				ret = 0;
+
+	pr_info("%s: slave alloc\n", DRIVER_NAME);
+
+	slave = kzalloc(size + sizeof(*slave), GFP_KERNEL);
+	if (!slave)
+		return NULL;
+
+	pr_info("%s: register device\n", DRIVER_NAME);
 
 	ptr = devres_alloc(devm_spislave_unregister_pdev, sizeof(*ptr),
 			   GFP_KERNEL);
 	if (!ptr) {
 		pr_err("%s: devers alloc error\n", DRIVER_NAME);
-		return -ENOMEM;
+		return NULL;
 	}
 
+	slave->dev.of_node = dev->of_node;
 	slave->dev.bus = &spislave_bus_type;
-	slave->dev.of_node = node;
+	slave->dev.class = &spislave_class;
+
+	sprintf(slave->name, "%s%d", "mcspi_slave", slave->bus_num);
 	dev_set_name(&slave->dev, "%s", slave->name);
 	ret = device_register(&slave->dev);
 	if (!ret) {
@@ -112,7 +134,21 @@ int spislave_register_device(struct device *dev, const char *name,
 		devres_add(dev, ptr);
 	} else {
 		devres_free(ptr);
+		return NULL;
 	}
+
+	return slave;
+}
+EXPORT_SYMBOL_GPL(spislave_alloc_slave);
+
+int spislave_register_device(struct device *dev, const char *name,
+				  struct spi_slave *slave,
+				  struct device_node *node)
+{
+	int					ret = 0;
+
+	struct device_node			*nc;
+	struct spislave_device			*slave_dev;
 
 	for_each_available_child_of_node(dev->of_node, nc) {
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
@@ -121,7 +157,6 @@ int spislave_register_device(struct device *dev, const char *name,
 		pr_info("%s: chid node is found: %s\n", DRIVER_NAME,
 			nc->full_name);
 
-		/*TODO: dem_kzalloc, */
 		slave_dev = kzalloc(sizeof(struct spislave_device), GFP_KERNEL);
 
 		if (slave_dev == NULL) {
@@ -147,7 +182,7 @@ int spislave_register_device(struct device *dev, const char *name,
 		of_node_get(nc);
 		slave_dev->dev.of_node = nc;
 		dev_set_name(&slave_dev->dev, "slave_dev%d", slave->bus_num);
-		ret = device_add(&slave_dev->dev);
+		ret = device_register(&slave_dev->dev);
 		if (!ret) {
 			pr_err("%s: register child device ok\n",
 			       DRIVER_NAME);
@@ -165,21 +200,23 @@ void spislave_unregister_device(struct spislave_device *sdev)
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_device);
 
-static inline void *spislave_get_slave_data(struct spi_slave *slave)
+inline void *spislave_get_slave_data(struct spi_slave *slave)
 {
 	return dev_get_drvdata(&slave->dev);
 }
+EXPORT_SYMBOL_GPL(spislave_get_slave_data);
 
-static inline void spislave_set_slave_data(struct spi_slave *slave,
+inline void spislave_set_slave_data(struct spi_slave *slave,
 					    void *data)
 {
 	dev_set_drvdata(&slave->dev, data);
 }
+EXPORT_SYMBOL_GPL(spislave_set_slave_data);
 
 /*============================================================================*/
 
 static const struct spislave_device_id *spislave_match_id(const struct
-		    spislave_device_id *id, const struct spislave_device *sdev)
+		    spislave_device_id * id, const struct spislave_device *sdev)
 {
 	pr_info("%s: spislave match id\n", DRIVER_NAME);
 
@@ -192,14 +229,14 @@ static const struct spislave_device_id *spislave_match_id(const struct
 }
 
 static int spislave_device_match(struct device *dev,
-				 struct device_driver *drv)
+				struct device_driver *drv)
 {
 	const struct spislave_driver		*sdrv;
 	const struct spislave_device		*sdev;
 
-	pr_info("%s: device match \n", DRIVER_NAME);
+	pr_info("%s: device match\n", DRIVER_NAME);
 
-	sdrv = to_spislave_drv(dev->driver);
+	sdrv = to_spislave_drv(drv);
 	sdev = to_spislave_dev(dev);
 
 	pr_info("%s: to spi slave drv and dev", DRIVER_NAME);
