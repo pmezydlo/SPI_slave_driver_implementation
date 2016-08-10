@@ -14,10 +14,10 @@
 #include "spi-slave-dev.h"
 #include "spi-slave-core.h"
 
-#define DRIVER_NAME			"spislavedev"
+#define DRIVER_NAME				"spislavedev"
 
-#define SPISLAVE_MAJOR		154
-#define N_SPI_MINORS		32
+#define SPISLAVE_MAJOR				154
+#define N_SPI_MINORS				32
 
 static						DECLARE_BITMAP(minors,
 							       N_SPI_MINORS);
@@ -54,7 +54,6 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
 		error_count, slave->rx_offset);
 
-	/*after read clear receive buffer*/
 	slave->rx_offset = 0;
 	memset(slave->rx, 0, slave->buf_depth);
 
@@ -266,20 +265,65 @@ static const struct file_operations spislave_fops = {
 	.poll		= spislave_event_poll,
 };
 
-static int spislave_probe(struct spislave_device *dev)
+static int spislave_probe(struct spislave_device *spi)
 {
 	int			ret = 0;
+	struct spislave_data	*data;
+	unsigned long		minor;
 
 	pr_info("%s: probe\n", DRIVER_NAME);
+
+	data = devm_kzalloc(&spi->dev, sizeof(*data),
+			    GFP_KERNEL);
+
+	if (!data)
+		return -ENOMEM;
+
+	data->slave = spi->slave;
+
+	INIT_LIST_HEAD(&data->device_entry);
+
+	minor = find_first_zero_bit(minors, N_SPI_MINORS);
+
+	if (minor < N_SPI_MINORS) {
+		struct device *dev;
+
+		data->devt = MKDEV(SPISLAVE_MAJOR, minor);
+		dev = device_create(spislave_class, &spi->dev,
+				    data->devt, data, "spislave%d",
+				    1);
+
+		ret = PTR_ERR_OR_ZERO(dev);
+	} else {
+		pr_err("%s: no minor number available!!\n",
+		       DRIVER_NAME);
+		ret = -ENODEV;
+	}
+
+	if (ret == 0) {
+		set_bit(minor, minors);
+		list_add(&data->device_entry, &device_list);
+	}
+
+	spislave_set_drv_data(spi, data);
 
 	return ret;
 }
 
-static int spislave_remove(struct spislave_device *dev)
+static int spislave_remove(struct spislave_device *spi)
 {
 	int			ret = 0;
+	struct spislave_data	*data = spislave_get_drv_data(spi);
 
 	pr_info("%s: remove\n", DRIVER_NAME);
+
+	data->slave = NULL;
+
+	list_del(&data->device_entry);
+	device_destroy(spislave_class, data->devt);
+	clear_bit(MINOR(data->devt), minors);
+	if (data->users == 0)
+		kfree(data);
 
 	return ret;
 }

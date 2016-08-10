@@ -620,6 +620,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	struct spi_slave				*slave;
 
+	static int					bus_num = 1;
 	u32						cs_sensitive;
 	u32						cs_polarity;
 	unsigned int					pin_dir;
@@ -670,6 +671,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 		irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 
+		slave->bus_num = bus_num++;
 	} else {
 		pdata = dev_get_platdata(&pdev->dev);
 		pr_err("%s: failed to match, install DTS", DRIVER_NAME);

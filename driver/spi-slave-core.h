@@ -68,12 +68,31 @@ extern int spislave_register_device(struct device *dev, const char *name,
 
 extern void spislave_unregister_device(struct spislave_device *dev);
 
-extern inline void *spislave_get_drv_data(struct spislave_device *sdev);
-extern inline void spislave_set_drv_data(struct spislave_device *sdev,
-					    void *data);
-extern inline void *spislave_get_slave_data(struct spi_slave *slave);
-extern inline void spislave_set_slave_data(struct spi_slave *slave,
-					    void *data);
+static inline void *spislave_get_drv_data(struct spislave_device *sdev)
+{
+	return dev_get_drvdata(&sdev->dev);
+}
+
+
+static inline void spislave_set_drv_data(struct spislave_device *sdev,
+					    void *data)
+{
+	dev_set_drvdata(&sdev->dev, data);
+}
+
+static inline void *spislave_get_slave_data(struct spi_slave *slave)
+{
+	return dev_get_drvdata(&slave->dev);
+}
+
+
+static inline void spislave_set_slave_data(struct spi_slave *slave,
+					    void *data)
+{
+	dev_set_drvdata(&slave->dev, data);
+}
+
+
 
 extern struct spi_slave *spislave_alloc_slave(struct device *dev,
 					      unsigned size);
