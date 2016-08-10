@@ -103,8 +103,6 @@ static struct class spislave_class = {
 struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned size)
 {
 	struct spi_slave		*slave;
-	struct spi_slave		**ptr;
-	int				ret = 0;
 
 	pr_info("%s: slave alloc\n", DRIVER_NAME);
 
@@ -114,28 +112,10 @@ struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned size)
 
 	pr_info("%s: register device\n", DRIVER_NAME);
 
-	ptr = devres_alloc(devm_spislave_unregister_pdev, sizeof(*ptr),
-			   GFP_KERNEL);
-	if (!ptr) {
-		pr_err("%s: devers alloc error\n", DRIVER_NAME);
-		return NULL;
-	}
-
-	slave->dev.of_node = dev->of_node;
-	slave->dev.bus = &spislave_bus_type;
+	device_initialize(&slave->dev);
 	slave->dev.class = &spislave_class;
-
-	sprintf(slave->name, "%s%d", "mcspi_slave", slave->bus_num);
-	dev_set_name(&slave->dev, "%s", slave->name);
-	ret = device_register(&slave->dev);
-	if (!ret) {
-		pr_info("%s: register device ok\n", DRIVER_NAME);
-		*ptr = slave;
-		devres_add(dev, ptr);
-	} else {
-		devres_free(ptr);
-		return NULL;
-	}
+	slave->dev.parent = get_device(dev);
+	dev_set_drvdata(&slave->dev, (void*)&slave[1]);
 
 	return slave;
 }
@@ -146,10 +126,36 @@ int spislave_register_device(struct device *dev, const char *name,
 				  struct device_node *node)
 {
 	int					ret = 0;
-
+	struct spi_slave			**ptr;
 	struct device_node			*nc;
 	struct spislave_device			*slave_dev;
+	static DEFINE_MUTEX(spislave_add_lock);
 
+	mutex_lock(&spislave_add_lock);
+
+	ptr = devres_alloc(devm_spislave_unregister_pdev, sizeof(*ptr),
+			   GFP_KERNEL);
+	if (!ptr) {
+		pr_err("%s: devers alloc error\n", DRIVER_NAME);
+		return -ENOMEM;
+	}
+
+	slave->dev.of_node = dev ? dev->of_node : NULL;
+	slave->dev.bus = &spislave_bus_type;
+	slave->dev.class = &spislave_class;
+	slave->bus_num = of_alias_get_id(slave->dev.of_node, "spi");
+	dev_set_name(&slave->dev, "%s.%u", name, slave->bus_num);
+	ret = device_add(&slave->dev);
+	if (!ret) {
+		pr_info("%s: register device ok\n", DRIVER_NAME);
+		*ptr = slave;
+		devres_add(dev, ptr);
+	} else
+		devres_free(ptr);
+
+
+
+	/*
 	for_each_available_child_of_node(dev->of_node, nc) {
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
 			continue;
@@ -167,7 +173,7 @@ int spislave_register_device(struct device *dev, const char *name,
 		slave_dev->slave = slave;
 		slave_dev->dev.parent = &slave->dev;
 		slave_dev->dev.bus = &spislave_bus_type;
-		/*slave_dev->dev.release = spislave_dev_release;*/
+		slave_dev->dev.release = spislave_dev_release;
 
 		ret = of_modalias_node(nc, slave_dev->modalias,
 				      sizeof(slave_dev->modalias));
@@ -189,7 +195,9 @@ int spislave_register_device(struct device *dev, const char *name,
 		} else
 			return ret;
 
-	}
+	}*/
+	mutex_unlock(&spislave_add_lock);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(spislave_register_device);
@@ -266,6 +274,14 @@ static int __init spislave_init(void)
 	pr_info("%s: init\n", DRIVER_NAME);
 
 	ret = bus_register(&spislave_bus_type);
+	if (ret < 0)
+		return ret;
+
+	ret = class_register(&spislave_class);
+	if (ret < 0) {
+		bus_unregister(&spislave_bus_type);
+		pr_err("%s: class register erroc\n", DRIVER_NAME);
+	}
 
 	return ret;
 }

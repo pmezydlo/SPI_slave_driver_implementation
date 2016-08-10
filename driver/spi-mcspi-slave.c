@@ -624,7 +624,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	u32						cs_polarity;
 	unsigned int					pin_dir;
 	unsigned int					irq;
-	static int					bus_num;
 	unsigned int					pha;
 	unsigned int					pol;
 
@@ -671,8 +670,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 		irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 
-		slave->bus_num = bus_num++;
-
 	} else {
 		pdata = dev_get_platdata(&pdev->dev);
 		pr_err("%s: failed to match, install DTS", DRIVER_NAME);
@@ -716,7 +713,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
 	slave->bytes_per_load		= SPI_SLAVE_COPY_LENGTH;
 	slave->bits_per_word		= SPI_SLAVE_BITS_PER_WORD;
-	slave->dev.of_node		= pdev->dev.of_node;
 
 	slave->enable = mcspi_slave_enable;
 	slave->disable = mcspi_slave_disable;
@@ -746,21 +742,18 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
-	/*
-	 *
-	 * ret = spislave_register_device(&pdev->dev, slave->name, slave,
-	 *
-	 * pdev->dev.of_node);
-	 */
+	ret = mcspi_slave_setup(slave);
+	if (ret < 0)
+		goto disable_pm;
+
+	sprintf(slave->name, "%s", DRIVER_NAME);
+	ret = spislave_register_device(&pdev->dev, slave->name, slave,
+					 pdev->dev.of_node);
 
 	if (ret) {
 		pr_err("%s: register device error\n", DRIVER_NAME);
 		goto disable_pm;
 	}
-
-	ret = mcspi_slave_setup(slave);
-	if (ret < 0)
-		goto disable_pm;
 
 	return ret;
 
