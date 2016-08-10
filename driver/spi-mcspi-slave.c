@@ -749,9 +749,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto disable_pm;
 
 	sprintf(slave->name, "%s", DRIVER_NAME);
-	ret = spislave_register_device(&pdev->dev, slave->name, slave,
-					 pdev->dev.of_node);
-
+	ret = devm_spislave_register_slave(&pdev->dev, slave);
 	if (ret) {
 		pr_err("%s: register device error\n", DRIVER_NAME);
 		goto disable_pm;

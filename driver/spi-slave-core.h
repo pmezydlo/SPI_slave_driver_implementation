@@ -62,9 +62,9 @@ struct spislave_driver {
 extern int spislave_register_driver(struct spislave_driver *sdrv);
 extern void spislave_unregister_driver(struct spislave_driver *sdrv);
 
-extern int spislave_register_device(struct device *dev, const char *name,
-					  struct spi_slave *slave,
-					  struct device_node *node);
+extern int devm_spislave_register_slave(struct device *dev,
+					struct spi_slave *slave);
+
 
 extern void spislave_unregister_device(struct spislave_device *dev);
 

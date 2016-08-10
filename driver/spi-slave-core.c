@@ -74,8 +74,6 @@ static void devm_spislave_unregister_pdev(struct device *dev, void *res)
 	spislave_unregister_pdev(*(struct spi_slave **)res);
 }
 
-
-
 static void spislave_dev_release(struct device *dev)
 {
 	struct spislave_device *slave_dev = to_spislave_dev(dev);
@@ -86,8 +84,6 @@ static void spislave_dev_release(struct device *dev)
 	put_device(&slave->dev);
 	kfree(slave_dev);
 }
-
-
 
 static void spislave_release(struct device *dev)
 {
@@ -124,14 +120,100 @@ struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned size)
 }
 EXPORT_SYMBOL_GPL(spislave_alloc_slave);
 
-int spislave_register_device(struct device *dev, const char *name,
-				  struct spi_slave *slave,
-				  struct device_node *node)
+static struct spislave_device *spislave_register_device(struct spi_slave *slave,
+							struct device_node *nc)
+{
+	struct spislave_device			*slave_dev;
+	int					ret = 0;
+
+	pr_info("%s: chid node is found: %s\n", DRIVER_NAME,
+		nc->full_name);
+
+	slave_dev = kzalloc(sizeof(*slave_dev), GFP_KERNEL);
+
+	if (slave_dev == NULL) {
+		put_device(&slave->dev);
+		return NULL;
+	}
+
+	slave_dev->slave = slave;
+	slave_dev->dev.parent = &slave->dev;
+	slave_dev->dev.bus = &spislave_bus_type;
+	slave_dev->dev.release = spislave_dev_release;
+
+	ret = of_modalias_node(nc, slave_dev->modalias,
+			      sizeof(slave_dev->modalias));
+	if (ret < 0) {
+		pr_err("%s: cannot find modalias\n", DRIVER_NAME);
+		return NULL;
+	}
+
+	pr_info("%s: modalias:%s\n", DRIVER_NAME, slave_dev->modalias);
+	of_node_get(nc);
+	slave_dev->dev.of_node = nc;
+	dev_set_name(&slave_dev->dev, "slave_dev%d", slave->bus_num);
+	ret = device_register(&slave_dev->dev);
+	if (!ret) {
+		pr_err("%s: register child device ok\n",
+		       DRIVER_NAME);
+	}
+
+	return slave_dev;
+}
+
+int spislave_register_devices(struct spi_slave *slave)
+{
+	struct spislave_device		*slave_dev;
+	struct device_node		*nc;
+
+	if (!slave->dev.of_node)
+		return -ENODEV;
+
+	for_each_available_child_of_node(slave->dev.of_node, nc) {
+		if (of_node_test_and_set_flag(nc, OF_POPULATED))
+			continue;
+
+		slave_dev = spislave_register_device(slave, nc);
+		if (IS_ERR(slave_dev))
+			pr_err("%s: filed to create spislave device\n",
+			DRIVER_NAME);
+	}
+	return 0;
+}
+
+
+int spislave_register_slave(struct spi_slave *slave, struct device *dev)
+{
+	int					ret = 0;
+
+	if (!dev)
+		return -ENODEV;
+
+	slave->dev.bus = &spislave_bus_type;
+	slave->dev.of_node = dev ? dev->of_node : NULL;
+	dev_set_name(&slave->dev, "%s.%u", slave->name, slave->bus_num);
+
+	if ((slave->bus_num < 0) && slave->dev.of_node)
+		slave->bus_num = of_alias_get_id(slave->dev.of_node, "spi");
+
+	ret = device_add(&slave->dev);
+	if (ret < 0) {
+		pr_err("%s:device add error\n", DRIVER_NAME);
+		return -ENODEV;
+	}
+
+	ret = spislave_register_devices(slave);
+	if (ret < 0)
+		pr_err("%s: child device add erroc\n", DRIVER_NAME);
+
+	return ret;
+}
+
+int devm_spislave_register_slave(struct device *dev,
+				  struct spi_slave *slave)
 {
 	int					ret = 0;
 	struct spi_slave			**ptr;
-	struct device_node			*nc;
-	struct spislave_device			*slave_dev;
 
 	ptr = devres_alloc(devm_spislave_unregister_pdev, sizeof(*ptr),
 			   GFP_KERNEL);
@@ -140,14 +222,7 @@ int spislave_register_device(struct device *dev, const char *name,
 		return -ENOMEM;
 	}
 
-	slave->dev.of_node = dev ? dev->of_node : NULL;
-	slave->dev.bus = &spislave_bus_type;
-
-	if ((slave->bus_num < 0) && slave->dev.of_node)
-		slave->bus_num = of_alias_get_id(slave->dev.of_node, "spi");
-
-	dev_set_name(&slave->dev, "%s.%u", name, slave->bus_num);
-	ret = device_add(&slave->dev);
+	ret = spislave_register_slave(slave, dev);
 	if (!ret) {
 		pr_info("%s: register device ok\n", DRIVER_NAME);
 		*ptr = slave;
@@ -155,50 +230,9 @@ int spislave_register_device(struct device *dev, const char *name,
 	} else
 		devres_free(ptr);
 
-	for_each_available_child_of_node(dev->of_node, nc) {
-		if (of_node_test_and_set_flag(nc, OF_POPULATED))
-			continue;
-
-		pr_info("%s: chid node is found: %s\n", DRIVER_NAME,
-			nc->full_name);
-
-		slave_dev = kzalloc(sizeof(struct spislave_device), GFP_KERNEL);
-
-		if (slave_dev == NULL) {
-			put_device(&slave->dev);
-			return -ENOMEM;
-		}
-
-		slave_dev->slave = slave;
-		slave_dev->dev.parent = &slave->dev;
-		slave_dev->dev.bus = &spislave_bus_type;
-		slave_dev->dev.release = spislave_dev_release;
-
-		ret = of_modalias_node(nc, slave_dev->modalias,
-				      sizeof(slave_dev->modalias));
-
-		if (ret < 0) {
-			pr_err("%s: cannot find modalias\n", DRIVER_NAME);
-			return ret;
-		}
-
-		pr_info("%s: modalias:%s\n", DRIVER_NAME, slave_dev->modalias);
-
-		of_node_get(nc);
-		slave_dev->dev.of_node = nc;
-		dev_set_name(&slave_dev->dev, "slave_dev%d", slave->bus_num);
-		ret = device_register(&slave_dev->dev);
-		if (!ret) {
-			pr_err("%s: register child device ok\n",
-			       DRIVER_NAME);
-		} else
-			return ret;
-
-	}
-
 	return ret;
 }
-EXPORT_SYMBOL_GPL(spislave_register_device);
+EXPORT_SYMBOL_GPL(devm_spislave_register_slave);
 
 void spislave_unregister_device(struct spislave_device *sdev)
 {
@@ -211,7 +245,6 @@ static const struct spislave_device_id *spislave_match_id(const struct
 		    spislave_device_id * id, const struct spislave_device *sdev)
 {
 	pr_info("%s: spislave match id\n", DRIVER_NAME);
-
 	while (id->name[0]) {
 		if (!strcmp(sdev->modalias, id->name))
 			return id;
