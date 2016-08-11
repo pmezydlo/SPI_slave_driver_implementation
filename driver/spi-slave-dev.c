@@ -33,14 +33,14 @@ struct spislave_data {
 	struct spi_slave			*slave;
 };
 
-static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
+static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
 	struct spi_slave			*slave;
 	int					error_count = 0;
 	struct spislave_data			*data;
 
-	data = flip->private_data;
+	data = filp->private_data;
 	slave = data->slave;
 	pr_info("%s: read begin\n", DRIVER_NAME);
 
@@ -63,7 +63,7 @@ static ssize_t spislave_read(struct file *flip, char __user *buf, size_t count,
 		return -EFAULT;
 }
 
-static ssize_t spislave_write(struct file *flip, const char __user *buf,
+static ssize_t spislave_write(struct file *filp, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
 	ssize_t					ret = 0;
@@ -71,7 +71,7 @@ static ssize_t spislave_write(struct file *flip, const char __user *buf,
 	unsigned long				missing;
 	struct spislave_data			*data;
 
-	data = flip->private_data;
+	data = filp->private_data;
 	slave = data->slave;
 
 	if (slave->tx == NULL) {
@@ -123,9 +123,6 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	struct spislave_data			*data;
 	struct spi_slave			*slave;
 
-	data = filp->private_data;
-	slave = data->slave;
-
 	list_for_each_entry(data, &device_list, device_entry) {
 		if (data->devt == inode->i_rdev) {
 			ret = 0;
@@ -134,8 +131,9 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	}
 
 	data->users++;
-	filp->private_data = slave;
+	filp->private_data = data;
 	nonseekable_open(inode, filp);
+	slave = data->slave;
 	init_waitqueue_head(&slave->wait);
 
 	pr_info("%s: open\n", DRIVER_NAME);
@@ -270,16 +268,24 @@ static int spislave_probe(struct spislave_device *spi)
 	int			ret = 0;
 	struct spislave_data	*data;
 	unsigned long		minor;
+	struct spi_slave	*slave;
 
 	pr_info("%s: probe\n", DRIVER_NAME);
 
-	data = devm_kzalloc(&spi->dev, sizeof(*data),
-			    GFP_KERNEL);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 
 	if (!data)
 		return -ENOMEM;
 
-	data->slave = spi->slave;
+	slave = spi->slave;
+	data->slave = slave;
+
+	if (slave == NULL) {
+		pr_err("%s: slave pointer is NULL\n", DRIVER_NAME);
+		return -EFAULT;
+	}
+
+	pr_info("%s: spi_slave start:0x%x", DRIVER_NAME, slave->start);
 
 	INIT_LIST_HEAD(&data->device_entry);
 
@@ -290,8 +296,8 @@ static int spislave_probe(struct spislave_device *spi)
 
 		data->devt = MKDEV(SPISLAVE_MAJOR, minor);
 		dev = device_create(spislave_class, &spi->dev,
-				    data->devt, data, "spislave%d",
-				    1);
+				    data->devt, data, "%s.%d",
+				    DRIVER_NAME, slave->bus_num);
 
 		ret = PTR_ERR_OR_ZERO(dev);
 	} else {

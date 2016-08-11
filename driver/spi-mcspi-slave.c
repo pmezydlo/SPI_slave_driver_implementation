@@ -601,7 +601,7 @@ static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 
 static const struct of_device_id mcspi_slave_of_match[] = {
 	{
-		.compatible = "ti,omap4-mcspi",
+		.compatible = "ti,omap4-mcspi-slave",
 		.data = &mcspi_slave_pdata,
 	},
 	{ }

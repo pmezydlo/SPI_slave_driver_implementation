@@ -16,7 +16,7 @@
 #define SPI_RM		1/*only receive mode*/
 #define SPI_TM		2/*only transmit mode*/
 
-static const char	*device = "/dev/spislave0";
+static const char	*device = "/dev/spislave1";
 
 static uint8_t		read_flag;
 static uint8_t		write_flag;

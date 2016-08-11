@@ -154,7 +154,7 @@ static struct spislave_device *spislave_register_device(struct spi_slave *slave,
 	dev_set_name(&slave_dev->dev, "slave_dev%d", slave->bus_num);
 	ret = device_register(&slave_dev->dev);
 	if (!ret) {
-		pr_err("%s: register child device ok\n",
+		pr_info("%s: register child device ok\n",
 		       DRIVER_NAME);
 	}
 
@@ -189,7 +189,6 @@ int spislave_register_slave(struct spi_slave *slave, struct device *dev)
 	if (!dev)
 		return -ENODEV;
 
-	slave->dev.bus = &spislave_bus_type;
 	slave->dev.of_node = dev ? dev->of_node : NULL;
 	dev_set_name(&slave->dev, "%s.%u", slave->name, slave->bus_num);
 
@@ -272,6 +271,8 @@ static int spislave_device_match(struct device *dev,
 	if (sdev == NULL)
 		pr_err("%s: sdev is NULL\n", DRIVER_NAME);
 
+	if (of_driver_match_device(dev, drv))
+		return 1;
 
 	if (sdrv->id_table)
 		return !!spislave_match_id(sdrv->id_table, sdev);

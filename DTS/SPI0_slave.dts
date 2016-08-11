@@ -30,18 +30,31 @@
     };
 
     fragment@2 {
-        target = <&spi0>;
+        target = <&ocp>;
         __overlay__ {
             #address-cells = <1>;
-            #size-cells = <0>;
+            #size-cells = <1>;
 
-            status = "okay";
-            pinctrl-names = "default";
-            pinctrl-0 = <&spi0_pins_s0>;
-
-            spislave@0 {
-                reg = <0>;
-                compatible = "linux,spislave";
+            spislave0: spislave@48030000 {
+                compatible = "ti,omap4-mcspi-slave";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                reg = <0x48030000 0x400>;
+                interrupts = <65>;
+                ti,spi-num-cs = <2>;
+                ti,hwmods = "spi0";
+                dmas = <&edma 16 0
+                        &edma 17 0
+                        &edma 18 0
+                        &edma 19 0>;
+                dma-names = "tx0", "rx0", "tx1", "rx1";
+                status = "okay";
+                pinctrl-names = "default";
+                pinctrl-0 = <&spi0_pins_s0>;
+                spislave@0 {
+                    reg = <0>;
+                    compatible = "linux,spislave";
+                };
             };
         };
     };
