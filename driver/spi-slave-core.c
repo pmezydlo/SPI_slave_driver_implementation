@@ -9,6 +9,7 @@
 
 #include "spi-slave-core.h"
 #define DRIVER_NAME "spislavecore"
+#define SPISLAVE_MODULE_PREFIX "spislave:"
 
 static int spislave_drv_probe(struct device *dev)
 {
@@ -35,8 +36,21 @@ static int spislave_drv_remove(struct device *dev)
 	const struct spislave_driver	*sdrv;
 	struct spislave_device		*sdev;
 
+	pr_info("%s: spislave drv remove\n", DRIVER_NAME);
+
 	sdrv = to_spislave_drv(dev->driver);
+
+	if (sdrv == NULL) {
+		pr_err("%s: sdrv pointer is NULL\n", DRIVER_NAME);
+		return -ENODEV;
+	}
+
 	sdev = to_spislave_dev(dev);
+
+	if (sdev == NULL) {
+		pr_err("%s: sdev pointer is NULL", DRIVER_NAME);
+		return -ENODEV;
+	}
 
 	ret = sdrv->remove(sdev);
 	dev_pm_domain_detach(dev, true);
@@ -64,22 +78,40 @@ EXPORT_SYMBOL_GPL(spislave_unregister_driver);
 
 
 /*============================================================================*/
-void spislave_unregister_pdev(struct spi_slave *slave)
+static int __unregister(struct device *dev, void *null)
 {
-	device_unregister(&slave->dev);
+	spislave_unregister_device(to_spislave_dev(dev));
+	return 0;
 }
 
-static void devm_spislave_unregister_pdev(struct device *dev, void *res)
+void spislave_unregister_slave(struct spi_slave *slave)
 {
-	spislave_unregister_pdev(*(struct spi_slave **)res);
+	int				dummy;
+
+	pr_info("%s: spislave_unregister slave", DRIVER_NAME);
+
+	dummy = device_for_each_child(&slave->dev, NULL, __unregister);
+	device_unregister(&slave->dev);
 }
+EXPORT_SYMBOL_GPL(spislave_unregister_slave);
+
+static void devm_spislave_unregister_slave(struct device *dev, void *res)
+{
+	pr_info("%s: devm spislave unregister pdev\n", DRIVER_NAME);
+	spislave_unregister_slave(*(struct spi_slave **)res);
+}
+EXPORT_SYMBOL_GPL(devm_spislave_unregister_slave);
 
 static void spislave_dev_release(struct device *dev)
 {
 	struct spislave_device *slave_dev = to_spislave_dev(dev);
 	struct spi_slave *slave;
 
+	pr_info("%s: spislave dev release\n", DRIVER_NAME);
+
 	slave = slave_dev->slave;
+
+	pr_info("%s: put device\n", DRIVER_NAME);
 
 	put_device(&slave->dev);
 	kfree(slave_dev);
@@ -89,6 +121,7 @@ static void spislave_release(struct device *dev)
 {
 	struct spi_slave *slave;
 
+	pr_info("%s: spislave release\n", DRIVER_NAME);
 	slave = container_of(dev, struct spi_slave, dev);
 	kfree(slave);
 }
@@ -189,6 +222,7 @@ int spislave_register_slave(struct spi_slave *slave, struct device *dev)
 	if (!dev)
 		return -ENODEV;
 
+	pr_info("%s: spislave register slave\n", DRIVER_NAME);
 	slave->dev.of_node = dev ? dev->of_node : NULL;
 	dev_set_name(&slave->dev, "%s.%u", slave->name, slave->bus_num);
 
@@ -214,7 +248,7 @@ int devm_spislave_register_slave(struct device *dev,
 	int					ret = 0;
 	struct spi_slave			**ptr;
 
-	ptr = devres_alloc(devm_spislave_unregister_pdev, sizeof(*ptr),
+	ptr = devres_alloc(devm_spislave_unregister_slave, sizeof(*ptr),
 			   GFP_KERNEL);
 	if (!ptr) {
 		pr_err("%s: devers alloc error\n", DRIVER_NAME);
@@ -235,6 +269,12 @@ EXPORT_SYMBOL_GPL(devm_spislave_register_slave);
 
 void spislave_unregister_device(struct spislave_device *sdev)
 {
+	if (!sdev)
+		return;
+
+	if (sdev->dev.of_node)
+		of_node_clear_flag(sdev->dev.of_node, OF_POPULATED);
+
 	device_unregister(&sdev->dev);
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_device);
@@ -280,9 +320,20 @@ static int spislave_device_match(struct device *dev,
 	return strcmp(sdev->modalias, sdrv->driver.name) == 0;
 }
 
+static int spislave_uevent(struct device *dev, struct kobj_uevent_env *env)
+{
+	const struct spislave_device *spi_dev = to_spislave_dev(dev);
+
+	add_uevent_var(env, "MODALIAS=%s%s", SPISLAVE_MODULE_PREFIX,
+		       spi_dev->modalias);
+
+	return 0;
+}
+
 struct bus_type spislave_bus_type = {
 	.name = "spislave",
 	.match = spislave_device_match,
+	.uevent = spislave_uevent,
 };
 
 static int __init spislave_init(void)
@@ -315,5 +366,5 @@ module_exit(spislave_exit);
 
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");
-MODULE_DESCRIPTION("User mode SPI slave device interface");
+MODULE_DESCRIPTION("bus driver");
 MODULE_VERSION("1.0");

@@ -777,7 +777,8 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 
 	slave = platform_get_drvdata(pdev);
 
-	/*spislave_unregister_device(slave);*/
+	if (slave == NULL)
+		pr_err("%s: remove mcspi slave pointer is NULL\n", DRIVER_NAME);
 
 	mcspi_slave_clean_up(slave);
 
@@ -800,6 +801,7 @@ static struct platform_driver mcspi_slave_driver = {
 
 module_platform_driver(mcspi_slave_driver);
 
+MODULE_ALIAS("spislave:omap2_mcspi");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");
 MODULE_DESCRIPTION("SPI slave for McSPI controller.");

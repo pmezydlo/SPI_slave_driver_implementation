@@ -323,11 +323,15 @@ static int spislave_remove(struct spislave_device *spi)
 
 	pr_info("%s: remove\n", DRIVER_NAME);
 
+	if (data == NULL)
+		pr_err("%s: data pointer is NULL in remove\n", DRIVER_NAME);
+
 	data->slave = NULL;
 
 	list_del(&data->device_entry);
 	device_destroy(spislave_class, data->devt);
 	clear_bit(MINOR(data->devt), minors);
+
 	if (data->users == 0)
 		kfree(data);
 
