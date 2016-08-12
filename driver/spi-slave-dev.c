@@ -383,12 +383,12 @@ static int __init spislave_init(void)
 
 static void __exit spislave_exit(void)
 {
-	class_unregister(spislave_class);
-	class_destroy(spislave_class);
-	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
+	pr_info("%s: exit\n", DRIVER_NAME);
 
 	spislave_unregister_driver(&slave_driver);
-	pr_info("%s: exit\n", DRIVER_NAME);
+
+	class_destroy(spislave_class);
+	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
 }
 
 module_init(spislave_init);

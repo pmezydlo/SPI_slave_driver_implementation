@@ -72,7 +72,8 @@ EXPORT_SYMBOL_GPL(spislave_register_driver);
 
 void spislave_unregister_driver(struct spislave_driver *sdrv)
 {
-	driver_unregister(&sdrv->driver);
+	if (sdrv)
+		driver_unregister(&sdrv->driver);
 }
 EXPORT_SYMBOL_GPL(spislave_unregister_driver);
 
@@ -184,7 +185,7 @@ static struct spislave_device *spislave_register_device(struct spi_slave *slave,
 	pr_info("%s: modalias:%s\n", DRIVER_NAME, slave_dev->modalias);
 	of_node_get(nc);
 	slave_dev->dev.of_node = nc;
-	dev_set_name(&slave_dev->dev, "slave_dev%d", slave->bus_num);
+	dev_set_name(&slave_dev->dev, "%s%d", slave->name, slave->bus_num);
 	ret = device_register(&slave_dev->dev);
 	if (!ret) {
 		pr_info("%s: register child device ok\n",
