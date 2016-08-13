@@ -12,7 +12,7 @@
 #include <linux/of.h>
 #include <linux/fs.h>
 #include <linux/ioctl.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
 #include <linux/sched.h>

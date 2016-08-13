@@ -133,7 +133,7 @@ static struct class spislave_class = {
 	.dev_release = spislave_release,
 };
 
-struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned size)
+struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned int size)
 {
 	struct spi_slave		*slave;
 

@@ -95,7 +95,7 @@ static inline void spislave_set_slave_data(struct spi_slave *slave,
 
 
 extern struct spi_slave *spislave_alloc_slave(struct device *dev,
-					      unsigned size);
+					      unsigned int size);
 
 static inline struct spislave_device *to_spislave_dev(struct device *dev)
 {
