@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/idr.h>
 #include <linux/of_device.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -24,42 +25,37 @@
 #include "spi-slave-dev.h"
 #include "spi-slave-core.h"
 
-#define DRIVER_NAME				"spislavedev"
+#define DRIVER_NAME		"spislavedev"
+#define SPISLAVE_MAJOR		156
 
-#define SPISLAVE_MAJOR				154
-#define N_SPI_MINORS				32
-
-static						DECLARE_BITMAP(minors,
-							       N_SPI_MINORS);
-static						LIST_HEAD(device_list);
-static struct class				*spislave_class;
+static LIST_HEAD(spislave_dev_list);
+static struct class *spislave_class;
+static DEFINE_SPINLOCK(spislave_lock);
+static DEFINE_IDR(spislave_idr);
+static DEFINE_SPINLOCK(spislave_idr_lock);
 
 struct spislave_data {
-	dev_t					devt;
-	struct	list_head			device_entry;
-	unsigned int				users;
-	wait_queue_head_t			wait;
-
-	struct spi_slave			*slave;
+	dev_t devt;
+	struct	list_head device_entry;
+	unsigned int users;
+	struct spi_slave *slave;
 };
 
 static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
-	struct spi_slave			*slave;
-	int					error_count = 0;
-	struct spislave_data			*data;
+	struct spi_slave *slave;
+	int error_count = 0;
+	struct spislave_data *data;
 
 	data = filp->private_data;
 	slave = data->slave;
-	pr_info("%s: read begin\n", DRIVER_NAME);
-
-	if (slave->rx == NULL) {
-		pr_err("%s: slave->rx pointer is NULL\n", DRIVER_NAME);
-		return -ENOMEM;
-	}
 
 	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
+
+	if (error_count != 0)
+		return -EFAULT;
+
 
 	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
 		error_count, slave->rx_offset);
@@ -67,27 +63,19 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	slave->rx_offset = 0;
 	memset(slave->rx, 0, slave->buf_depth);
 
-	if (error_count == 0)
-		return 0;
-	else
-		return -EFAULT;
+	return 0;
 }
 
 static ssize_t spislave_write(struct file *filp, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
-	ssize_t					ret = 0;
-	struct spi_slave			*slave;
-	unsigned long				missing;
-	struct spislave_data			*data;
+	ssize_t ret = 0;
+	struct spi_slave *slave;
+	unsigned long missing;
+	struct spislave_data *data;
 
 	data = filp->private_data;
 	slave = data->slave;
-
-	if (slave->tx == NULL) {
-		pr_err("%s: slave->tx pointer is NULL\n", DRIVER_NAME);
-		return -ENOMEM;
-	}
 
 	memset(slave->tx, 0, slave->buf_depth);
 
@@ -98,10 +86,7 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 	else
 		return -EFAULT;
 
-
-	pr_info("%s: write count:%d\n", DRIVER_NAME, count);
 	slave->tx_offset = 0;
-
 	slave->enable(slave);
 	slave->transfer(slave);
 
@@ -110,30 +95,34 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	int					ret = 0;
-	struct spi_slave			*slave;
-	struct spislave_data			*data;
+	int ret = 0;
+	struct spi_slave *slave;
+	struct spislave_data *data;
+
+	spin_lock(&spislave_lock);
 
 	data = filp->private_data;
 	slave = data->slave;
 
-	filp->private_data = NULL;
-
-	slave->clr_transfer(slave);
-
 	data->users--;
 
-	pr_info("%s: release\n", DRIVER_NAME);
+	if (!data->users)
+
+	filp->private_data = NULL;
+	slave->clr_transfer(slave);
+
+	spin_unlock(&spislave_lock);
+
 	return ret;
 }
 
 static int spislave_open(struct inode *inode, struct file *filp)
 {
-	int					ret = -ENXIO;
-	struct spislave_data			*data;
-	struct spi_slave			*slave;
+	int ret = -ENXIO;
+	struct spislave_data *data;
+	struct spi_slave *slave;
 
-	list_for_each_entry(data, &device_list, device_entry) {
+	list_for_each_entry(data, &spislave_dev_list, device_entry) {
 		if (data->devt == inode->i_rdev) {
 			ret = 0;
 			break;
@@ -146,17 +135,20 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	slave = data->slave;
 	init_waitqueue_head(&slave->wait);
 
-	pr_info("%s: open\n", DRIVER_NAME);
+	spin_unlock(&spislave_lock);
+
 	return ret;
 }
 
 static long spislave_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	int					ret = 0;
-	int					err = 0;
-	struct spi_slave			*slave;
-	struct spislave_data			*data;
+	int ret = 0;
+	int err = 0;
+	struct spi_slave *slave;
+	struct spislave_data *data;
+
+	spin_lock(&spislave_lock);
 
 	data = filp->private_data;
 	slave = data->slave;
@@ -242,23 +234,16 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 static unsigned int spislave_event_poll(struct file *filp,
 					struct poll_table_struct *wait)
 {
-	struct spi_slave			*slave;
-	unsigned int				events = 0;
-	struct spislave_data			*data;
+	struct spi_slave *slave;
+	unsigned int events = 0;
+	struct spislave_data *data;
 
 	data = filp->private_data;
 	slave = data->slave;
 
-	if (slave == NULL) {
-		pr_err("%s: slave pointer is NULL!!\n", DRIVER_NAME);
-		return -EFAULT;
-	}
-
 	poll_wait(filp, &slave->wait, wait);
 	if (slave->rx_offset != 0)
 		events = POLLIN | POLLRDNORM;
-
-	pr_info("%s: POLL method end!!\n", DRIVER_NAME);
 
 	return events;
 }
@@ -275,49 +260,40 @@ static const struct file_operations spislave_fops = {
 
 static int spislave_probe(struct spislave_device *spi)
 {
-	int			ret = 0;
-	struct spislave_data	*data;
-	unsigned long		minor;
-	struct spi_slave	*slave;
-
-	pr_info("%s: probe\n", DRIVER_NAME);
+	int ret = 0;
+	struct spislave_data *data;
+	struct spi_slave *slave;
+	int data_id;
+	struct device *dev;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
-
 	if (!data)
-		return -ENOMEM;
+		return -ENODEV;
 
 	slave = spi->slave;
 	data->slave = slave;
 
-	if (slave == NULL) {
-		pr_err("%s: slave pointer is NULL\n", DRIVER_NAME);
-		return -EFAULT;
-	}
+	if (slave == NULL)
+		return -ENODEV;
+	do {
+		if (!idr_pre_get(&spislave_idr, GFP_KERNEL) == 0) {
+			dev_dbg(&slave->dev, "can't reserve idr resources.\n");
+			return -ENOMEM;
+		}
 
-	INIT_LIST_HEAD(&data->device_entry);
+		spin_lock(&spislave_idr_lock);
+		ret = idr_get_new(&spislave_idr, data, &data_id);
+		spin_unlock(&spislave_idr_lock);
+	} while (ret == -EAGAIN);
 
-	minor = find_first_zero_bit(minors, N_SPI_MINORS);
 
-	if (minor < N_SPI_MINORS) {
-		struct device *dev;
+	data->devt = MKDEV(SPISLAVE_MAJOR, data_id);
+	dev = device_create(spislave_class, &spi->dev,
+			    data->devt, data, "%s.%d",
+			    DRIVER_NAME, slave->bus_num);
 
-		data->devt = MKDEV(SPISLAVE_MAJOR, minor);
-		dev = device_create(spislave_class, &spi->dev,
-				    data->devt, data, "%s.%d",
-				    DRIVER_NAME, slave->bus_num);
-
-		ret = PTR_ERR_OR_ZERO(dev);
-	} else {
-		pr_err("%s: no minor number available!!\n",
-		       DRIVER_NAME);
-		ret = -ENODEV;
-	}
-
-	if (ret == 0) {
-		set_bit(minor, minors);
-		list_add(&data->device_entry, &device_list);
-	}
+	if (IS_ERR(&spislave_idr))
+		return PTR_ERR(dev);
 
 	spislave_set_drv_data(spi, data);
 
@@ -326,22 +302,18 @@ static int spislave_probe(struct spislave_device *spi)
 
 static int spislave_remove(struct spislave_device *spi)
 {
-	int			ret = 0;
-	struct spislave_data	*data = spislave_get_drv_data(spi);
-
-	pr_info("%s: remove\n", DRIVER_NAME);
-
-	if (data == NULL)
-		pr_err("%s: data pointer is NULL in remove\n", DRIVER_NAME);
+	int ret = 0;
+	struct spislave_data *data = spislave_get_drv_data(spi);
 
 	data->slave = NULL;
 
+	spin_lock(&spislave_lock);
 	list_del(&data->device_entry);
-	device_destroy(spislave_class, data->devt);
-	clear_bit(MINOR(data->devt), minors);
+	spin_lock(&spislave_lock);
 
-	if (data->users == 0)
-		kfree(data);
+	device_destroy(spislave_class, data->devt);
+
+	kfree(data);
 
 	return ret;
 }
@@ -363,11 +335,9 @@ static struct spislave_driver slave_driver = {
 
 static int __init spislave_init(void)
 {
-	int			ret = 0;
+	int ret = 0;
 
-	BUILD_BUG_ON(N_SPI_MINORS > 256);
-
-	ret = register_chrdev(SPISLAVE_MAJOR, "spi", &spislave_fops);
+	ret = register_chrdev(SPISLAVE_MAJOR, "spislave", &spislave_fops);
 	if (ret < 0)
 		return ret;
 
@@ -381,20 +351,18 @@ static int __init spislave_init(void)
 	if (ret) {
 		class_unregister(spislave_class);
 		class_destroy(spislave_class);
-
 		return ret;
 	}
-	pr_info("%s: init\n", DRIVER_NAME);
+
+	idr_init(&spislave_idr);
 
 	return ret;
 }
 
 static void __exit spislave_exit(void)
 {
-	pr_info("%s: exit\n", DRIVER_NAME);
-
+	idr_destroy(&spislave_idr);
 	spislave_unregister_driver(&slave_driver);
-
 	class_destroy(spislave_class);
 	unregister_chrdev(SPISLAVE_MAJOR, DRIVER_NAME);
 }
