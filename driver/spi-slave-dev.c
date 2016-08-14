@@ -1,3 +1,13 @@
+/*
+ * Simple userspace interface to SPI devices in slave mode.
+ *
+ * Copyright (C) 2016 Patryk Mężydło <mezydlo.p@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -284,8 +294,6 @@ static int spislave_probe(struct spislave_device *spi)
 		pr_err("%s: slave pointer is NULL\n", DRIVER_NAME);
 		return -EFAULT;
 	}
-
-	pr_info("%s: spi_slave start:0x%x", DRIVER_NAME, slave->start);
 
 	INIT_LIST_HEAD(&data->device_entry);
 

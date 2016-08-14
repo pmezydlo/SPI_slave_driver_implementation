@@ -12,7 +12,6 @@ obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o driver/spi-slave-core.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER)  modules
-	$(COMPILER)$(COMPILER_V) -o test_master_app/spidev_test test_master_app/spidev_test.c
 	$(COMPILER)$(COMPILER_V) -o slave_app/slave_app slave_app/slave_app.c
 
 clean:

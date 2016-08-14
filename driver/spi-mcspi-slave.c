@@ -1,3 +1,13 @@
+/*
+ * Driver for OMAP2 McSPI controller in slave mode.
+ *
+ * Copyright (C) 2016 Patryk Mężydło <mezydlo.p@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -60,7 +70,7 @@
 #define MCSPI_RX0				0x3C
 #define MCSPI_XFERLEVEL				0x7C
 #define MCSPI_DAFTX				0x80
-#define	MCSPI_DAFRX				0xA0
+#define MCSPI_DAFRX				0xA0
 
 #define SPI_AUTOSUSPEND_TIMEOUT			-1
 
@@ -140,17 +150,15 @@ static inline int mcspi_slave_bytes_per_word(int word_len)
 
 static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 {
-	unsigned long				timeout;
+	unsigned long timeout;
 
 	timeout = jiffies + msecs_to_jiffies(1000);
 	while (!(ioread32(reg) & bit)) {
-		if (time_after(jiffies, timeout)) {
-			if (!(ioread32(reg) & bit)) {
-				pr_err("%s: mcspi timeout!!!\n", DRIVER_NAME);
-				return -ETIMEDOUT;
-			} else
-				return 0;
-		}
+		if (time_after(jiffies, timeout))
+			return -ETIMEDOUT;
+		else
+			return 0;
+
 		cpu_relax();
 	}
 	return 0;
@@ -158,36 +166,28 @@ static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 
 static void mcspi_slave_enable(struct spi_slave *slave)
 {
-	u32					l;
+	u32 l;
 
-	pr_info("%s: spi is enabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
-
 	l |= MCSPI_CHCTRL_EN;
-	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
-
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
 
 static void mcspi_slave_disable(struct spi_slave *slave)
 {
-	u32					l;
+	u32 l;
 
-	pr_info("%s: spi is disabled\n", DRIVER_NAME);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
-
 	l &= ~MCSPI_CHCTRL_EN;
-	pr_info("%s: MCSPI_CH0CTRL:0x%x\n", DRIVER_NAME, l);
-
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
 }
 
 static void mcspi_slave_pio_rx_transfer(unsigned long data)
 {
-	struct spi_slave			*slave;
-	unsigned int				c;
-	void __iomem				*rx_reg;
-	void __iomem				*chstat;
+	struct spi_slave *slave;
+	unsigned int c;
+	void __iomem *rx_reg;
+	void __iomem *chstat;
 
 	slave = (struct spi_slave *) data;
 
@@ -198,7 +198,7 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (slave->rx_offset >= slave->buf_depth) {
-		pr_err("%s: end of rx buffer!!!", DRIVER_NAME);
+		dev_dbg(&slave->dev, "end of rx buffer!\n");
 		slave->rx_offset = 0;
 		return;
 	}
@@ -253,15 +253,15 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 
 	return;
 out:
-	pr_err("%s: timeout!!!", DRIVER_NAME);
+	dev_dbg(&slave->dev, "timeout!\n");
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
 static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 {
-	unsigned int				c;
-	void __iomem				*tx_reg;
-	void __iomem				*chstat;
+	unsigned int c;
+	void __iomem *tx_reg;
+	void __iomem *chstat;
 
 	tx_reg = slave->base + MCSPI_TX0;
 	chstat = slave->base + MCSPI_CH0STAT;
@@ -274,16 +274,16 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 	c /= mcspi_slave_bytes_per_word(slave->bits_per_word);
 
 	if (slave->tx_offset >= slave->buf_depth) {
-		pr_err("%s: end of tx buffer!!!", DRIVER_NAME);
+		dev_dbg(&slave->dev, "end of tx buffer!\n");
 		slave->tx_offset = 0;
 		return;
 	}
 
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
-	const u8 *tx;
+		const u8 *tx;
 
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u8) * c);
+		tx = slave->tx + slave->tx_offset;
+		slave->tx_offset += (sizeof(u8) * c);
 
 		do {
 			c -= 1;
@@ -296,10 +296,11 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 	}
 
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
-	const u16 *tx;
+		const u16 *tx;
 
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u16) * c);
+		tx = slave->tx + slave->tx_offset;
+		slave->tx_offset += (sizeof(u16) * c);
+
 		do {
 			c -= 1;
 			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
@@ -311,10 +312,10 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 	}
 
 	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
-	const u32 *tx;
+		const u32 *tx;
 
-	tx = slave->tx + slave->tx_offset;
-	slave->tx_offset += (sizeof(u32) * c);
+		tx = slave->tx + slave->tx_offset;
+		slave->tx_offset += (sizeof(u32) * c);
 
 		do {
 			c -= 1;
@@ -328,22 +329,20 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 
 	return;
 out:
-	pr_err("%s: timeout!!!", DRIVER_NAME);
+	dev_dbg(&slave->dev, "timeout!!!\n");
 }
 
 static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
-	struct spi_slave			*slave = dev_id;
-	u32					l;
+	struct spi_slave *slave = dev_id;
+	u32 l;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
 
 	if (l & MCSPI_CHSTAT_EOT) {
-		pr_info("%s: end of transfer is set\n", DRIVER_NAME);
 		wake_up_interruptible(&slave->wait);
 		mcspi_slave_disable(slave);
-	} else
-		pr_info("%s: end of transfer is clr\n", DRIVER_NAME);
+	}
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
 
@@ -354,26 +353,19 @@ static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 	}
 
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
-
 	return (irq_handler_t) IRQ_HANDLED;
 }
 
 static int mcspi_slave_set_irq(struct spi_slave *slave)
 {
-	u32					l;
-	int					ret = 0;
-
-	pr_info("%s: set interrupt\n", DRIVER_NAME);
+	u32 l;
+	int ret = 0;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
 
 	l &= ~MCSPI_IRQ_RX_FULL;
 	l &= ~MCSPI_IRQ_TX_EMPTY;
-
-
 	l |= MCSPI_IRQ_RX_FULL;
-
-	pr_info("%s: MCSPI_IRQENABLE:0x%x\n", DRIVER_NAME, l);
 
 	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
 
@@ -382,8 +374,7 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 				IRQF_TRIGGER_NONE,
 				DRIVER_NAME, slave);
 	if (ret) {
-		pr_err("%s: unable to request irq:%d\n", DRIVER_NAME,
-			slave->irq);
+		dev_dbg(&slave->dev, "unable to request irq:%d\n", slave->irq);
 		ret = -EINTR;
 	}
 
@@ -392,15 +383,8 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 
 static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
-	u32					l;
-	int					ret = 0;
-
-	pr_info("%s: pio transfer setup\n", DRIVER_NAME);
-
-	pr_info("%s: mode:%d\n", DRIVER_NAME, slave->mode);
-	pr_info("%s: bits_per_word:%x\n", DRIVER_NAME, slave->bits_per_word);
-	pr_info("%s: bytes_per_load:%d\n", DRIVER_NAME, slave->bytes_per_load);
-	pr_info("%s: buf_depth:%d\n", DRIVER_NAME, slave->buf_depth);
+	u32 l;
+	int ret = 0;
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
 		slave->tx = kzalloc(slave->buf_depth, GFP_KERNEL);
@@ -426,8 +410,6 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 
 	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
 
-	pr_info("%s: MCSPI_XFERLEVEL:0x%x\n", DRIVER_NAME, l);
-
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
 	l &= ~MCSPI_CHCONF_TRM;
@@ -450,23 +432,16 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 		l |= MCSPI_CHCONF_FFEW;
 
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
-	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
-
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
-
 	l &= ~MCSPI_MODULCTRL_FDAA;
-
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
-	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 
 	return ret;
 }
 
 static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 {
-	int					ret = 0;
-
-	pr_info("%s: clear transfer", DRIVER_NAME);
+	int ret = 0;
 
 	if (slave->tx != NULL)
 		kfree(slave->tx);
@@ -481,15 +456,11 @@ static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 
 static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 {
-	u32					l;
-
-	pr_info("%s: set slave mode\n", DRIVER_NAME);
+	u32 l;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
 	l |= MCSPI_MODULCTRL_MS;
-
-	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 
@@ -518,15 +489,12 @@ static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 	else
 		l |= MCSPI_CHCONF_PHA;
 
-	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 }
 
 static void mcspi_slave_set_cs(struct spi_slave *slave)
 {
-	u32					l;
-
-	pr_info("%s: set cs sensitive and polarity\n", DRIVER_NAME);
+	u32 l;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
@@ -535,7 +503,6 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	else
 		l &= ~MCSPI_CHCONF_EPOL;
 
-	pr_info("%s: MCSPI_CH0CONF:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
 	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
@@ -544,26 +511,21 @@ static void mcspi_slave_set_cs(struct spi_slave *slave)
 	else
 		l |= MCSPI_MODULCTRL_PIN34;
 
-	pr_info("%s: MCSPI_MODULCTRL:0x%x\n", DRIVER_NAME, l);
 	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
 }
 
 static int mcspi_slave_setup(struct spi_slave *slave)
 {
-	int					ret = 0;
-	u32					l;
-
-	pr_info("%s: slave setup\n", DRIVER_NAME);
+	int ret = 0;
+	u32 l;
 
 	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
 
-	pr_info("%s: MCSPI_SYSSTATUS:0x%x\n", DRIVER_NAME, l);
-
 	if (mcspi_slave_wait_for_bit(slave->base + MCSPI_SYSSTATUS,
-					      MCSPI_SYSSTATUS_RESETDONE) == 0) {
-
-		pr_info("%s: controller ready for setting\n",
-			DRIVER_NAME);
+					      MCSPI_SYSSTATUS_RESETDONE) != 0) {
+		dev_dbg(&slave->dev, "internal module reset is on-going\n");
+		return -EIO;
+	}
 
 		mcspi_slave_disable(slave);
 		mcspi_slave_set_slave_mode(slave);
@@ -573,18 +535,11 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		if (ret < 0)
 			return ret;
 
-	} else {
-		pr_err("%s: internal module reset is on-going\n",
-			DRIVER_NAME);
-		ret = -EIO;
-	}
 	return ret;
 }
 
 static void mcspi_slave_clean_up(struct spi_slave *slave)
 {
-	pr_info("%s: clean up", DRIVER_NAME);
-
 	tasklet_kill(&pio_rx_tasklet);
 
 	if (slave->tx != NULL)
@@ -592,7 +547,6 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 
 	if (slave->rx != NULL)
 		kfree(slave->rx);
-
 }
 
 static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
@@ -610,83 +564,69 @@ MODULE_DEVICE_TABLE(of, mcspi_slave_of_match);
 
 static int mcspi_slave_probe(struct platform_device *pdev)
 {
-	struct resource					*res;
-	struct resource					cp_res;
-	const struct of_device_id			*match;
-	const struct omap2_mcspi_platform_config	*pdata;
-
-	int						ret = 0;
-	u32						regs_offset = 0;
-
-	struct spi_slave				*slave;
-
-	static int					bus_num = 1;
-	u32						cs_sensitive;
-	u32						cs_polarity;
-	unsigned int					pin_dir;
-	unsigned int					irq;
-	unsigned int					pha;
-	unsigned int					pol;
-
-	pr_info("%s: Entry probe\n", DRIVER_NAME);
+	struct resource	*res;
+	struct resource	cp_res;
+	const struct of_device_id *match;
+	const struct omap2_mcspi_platform_config *pdata;
+	int ret = 0;
+	u32 regs_offset = 0;
+	struct spi_slave *slave;
+	static int bus_num = 1;
+	u32 cs_sensitive;
+	u32 cs_polarity;
+	unsigned int pin_dir;
+	unsigned int irq;
+	unsigned int pha;
+	unsigned int pol;
 
 	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spi_slave));
-
 	if (slave == NULL)
 		return -ENOMEM;
 
 	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
-	if (match) {
-		pdata = match->data;
-
-		if (of_get_property(pdev->dev.of_node, "cs_polarity",
-				    &cs_polarity))
-			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
-		else
-			cs_polarity = MCSPI_CS_POLARITY_ACTIVE_LOW;
-
-		if (of_get_property(pdev->dev.of_node, "cs_sensitive",
-				    &cs_sensitive))
-			cs_sensitive = MCSPI_CS_SENSITIVE_DISABLED;
-		else
-			cs_sensitive = MCSPI_CS_SENSITIVE_ENABLED;
-
-		if (of_get_property(pdev->dev.of_node, "pindir-D0-out-D1-in",
-				    &pin_dir))
-			pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
-		else
-			pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
-
-		if (of_get_property(pdev->dev.of_node, "pha", &pha))
-			pha = MCSPI_PHA_EVEN_NUMBERED_EDGES;
-		else
-			pha = MCSPI_PHA_ODD_NUMBERED_EDGES;
-
-		if (of_get_property(pdev->dev.of_node, "pol", &pol))
-			pol = MCSPI_POL_HELD_LOW;
-		else
-			pol = MCSPI_POL_HELD_HIGH;
-
-
-		irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-
-		slave->bus_num = bus_num++;
-	} else {
-		pdata = dev_get_platdata(&pdev->dev);
-		pr_err("%s: failed to match, install DTS", DRIVER_NAME);
+	if (!match) {
+		dev_dbg(&slave->dev, "failed to match, install DTS\n");
 		ret = -EINVAL;
 		goto free_slave;
 	}
 
+	pdata = match->data;
+
+	if (of_get_property(pdev->dev.of_node, "cs_polarity", &cs_polarity))
+		cs_polarity = MCSPI_CS_POLARITY_ACTIVE_HIGH;
+	else
+		cs_polarity = MCSPI_CS_POLARITY_ACTIVE_LOW;
+
+	if (of_get_property(pdev->dev.of_node, "cs_sensitive", &cs_sensitive))
+		cs_sensitive = MCSPI_CS_SENSITIVE_DISABLED;
+	else
+		cs_sensitive = MCSPI_CS_SENSITIVE_ENABLED;
+
+	if (of_get_property(pdev->dev.of_node, "pindir-D0-out-D1-in", &pin_dir))
+		pin_dir = MCSPI_PIN_DIR_D0_OUT_D1_IN;
+	else
+		pin_dir = MCSPI_PIN_DIR_D0_IN_D1_OUT;
+
+	if (of_get_property(pdev->dev.of_node, "pha", &pha))
+		pha = MCSPI_PHA_EVEN_NUMBERED_EDGES;
+	else
+		pha = MCSPI_PHA_ODD_NUMBERED_EDGES;
+
+	if (of_get_property(pdev->dev.of_node, "pol", &pol))
+		pol = MCSPI_POL_HELD_LOW;
+	else
+		pol = MCSPI_POL_HELD_HIGH;
+
+
+	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	slave->bus_num = bus_num++;
 	regs_offset = pdata->regs_offset;
-
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-
 	memcpy(&cp_res, res, sizeof(struct resource));
 
 	if (res == NULL) {
-		pr_err("%s: res not availablee\n", DRIVER_NAME);
+		dev_dbg(&slave->dev, "res not availablee\n");
 		ret = -ENODEV;
 		goto free_slave;
 	}
@@ -697,24 +637,23 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->base = devm_ioremap_resource(&pdev->dev, &cp_res);
 
 	if (IS_ERR(slave->base)) {
-		pr_err("%s: base addres ioremap error!!", DRIVER_NAME);
+		dev_dbg(&slave->dev, "base addres ioremap error!\n");
 		ret = PTR_ERR(slave->base);
 		goto free_slave;
 	}
 
-	slave->cs_polarity		= cs_polarity;
-	slave->start			= cp_res.start;
-	slave->end			= cp_res.end;
-	slave->reg_offset		= regs_offset;
-	slave->cs_sensitive		= cs_sensitive;
-	slave->pin_dir			= pin_dir;
-	slave->irq			= irq;
-	slave->pol			= pol;
-	slave->pha			= pha;
-	slave->mode			= SPI_SLAVE_MODE;
-	slave->buf_depth		= SPI_SLAVE_BUF_DEPTH;
-	slave->bytes_per_load		= SPI_SLAVE_COPY_LENGTH;
-	slave->bits_per_word		= SPI_SLAVE_BITS_PER_WORD;
+	slave->cs_polarity = cs_polarity;
+	slave->phys_addr = cp_res.start;
+	slave->reg_offset = regs_offset;
+	slave->cs_sensitive = cs_sensitive;
+	slave->pin_dir = pin_dir;
+	slave->irq = irq;
+	slave->pol = pol;
+	slave->pha = pha;
+	slave->mode = SPI_SLAVE_MODE;
+	slave->buf_depth = SPI_SLAVE_BUF_DEPTH;
+	slave->bytes_per_load = SPI_SLAVE_COPY_LENGTH;
+	slave->bits_per_word = SPI_SLAVE_BITS_PER_WORD;
 
 	slave->enable = mcspi_slave_enable;
 	slave->disable = mcspi_slave_disable;
@@ -723,17 +662,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->transfer = mcspi_slave_pio_tx_transfer;
 
 	platform_set_drvdata(pdev, slave);
-
-	pr_info("%s: start:%x\n", DRIVER_NAME, slave->start);
-	pr_info("%s: end:%x\n", DRIVER_NAME, slave->end);
-	pr_info("%s: bus_num:%d\n", DRIVER_NAME, slave->bus_num);
-	pr_info("%s: regs_offset=%x\n", DRIVER_NAME, slave->reg_offset);
-	pr_info("%s: cs_sensitive=%d\n", DRIVER_NAME, slave->cs_sensitive);
-	pr_info("%s: cs_polarity=%d\n", DRIVER_NAME, slave->cs_polarity);
-	pr_info("%s: pin_dir=%d\n", DRIVER_NAME, slave->pin_dir);
-	pr_info("%s: interrupt:%d\n", DRIVER_NAME, slave->irq);
-	pr_info("%s: pol=%d\n", DRIVER_NAME, slave->pol);
-	pr_info("%s: pha=%d\n", DRIVER_NAME, slave->pha);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
@@ -751,7 +679,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	sprintf(slave->name, "%s", DRIVER_NAME);
 	ret = devm_spislave_register_slave(&pdev->dev, slave);
 	if (ret) {
-		pr_err("%s: register device error\n", DRIVER_NAME);
+		dev_dbg(&slave->dev, "register device error\n");
 		goto disable_pm;
 	}
 
@@ -773,12 +701,9 @@ free_slave:
 
 static int mcspi_slave_remove(struct platform_device *pdev)
 {
-	struct spi_slave			*slave;
+	struct spi_slave *slave;
 
 	slave = platform_get_drvdata(pdev);
-
-	if (slave == NULL)
-		pr_err("%s: remove mcspi slave pointer is NULL\n", DRIVER_NAME);
 
 	mcspi_slave_clean_up(slave);
 
@@ -786,7 +711,6 @@ static int mcspi_slave_remove(struct platform_device *pdev)
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
-	pr_info("%s: remove\n", DRIVER_NAME);
 	return 0;
 }
 
@@ -801,7 +725,6 @@ static struct platform_driver mcspi_slave_driver = {
 
 module_platform_driver(mcspi_slave_driver);
 
-MODULE_ALIAS("spislave:omap2_mcspi");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Patryk Mezydlo, <mezydlo.p@gmail.com>");
 MODULE_DESCRIPTION("SPI slave for McSPI controller.");

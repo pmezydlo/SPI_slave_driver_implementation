@@ -1,3 +1,13 @@
+/*
+ * IOCTL commands for SPI userspace interface in slave mode.
+ *
+ * Copyright (C) 2016 Patryk Mężydło <mezydlo.p@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
 #ifndef SPISLAVE_H
 #define SPISLAVE_H
 
@@ -25,6 +35,5 @@
 #define SPISLAVE_DISABLED		_IO(SPISLAVE_IOC_MAGIC, 8)
 #define SPISLAVE_SET_TRANSFER		_IO(SPISLAVE_IOC_MAGIC, 9)
 #define SPISLAVE_CLR_TRANSFER		_IO(SPISLAVE_IOC_MAGIC, 10)
-
 
 #endif
