@@ -28,7 +28,7 @@
             #address-cells = <1>;
             #size-cells = <1>;
 
-	    spislave1: spislave@481a0000 {
+	    spislave1: spi_mcspi_slave1@481a0000 {
 	        compatible = "ti,omap4-mcspi-slave";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -44,7 +44,7 @@
 		status = "okay";
                 pinctrl-names = "default";
                 pinctrl-0 = <&spi1_pins_s0>;
-                spislave@1 {
+                spislave1@1 {
                     reg = <0>;
                     compatible = "linux,spislave";
                 };

@@ -571,13 +571,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	int ret = 0;
 	u32 regs_offset = 0;
 	struct spi_slave *slave;
-	static int bus_num = 1;
 	u32 cs_sensitive;
 	u32 cs_polarity;
 	unsigned int pin_dir;
 	unsigned int irq;
 	unsigned int pha;
 	unsigned int pol;
+	static int bus_num = 0;
 
 	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spi_slave));
 	if (slave == NULL)
@@ -618,9 +618,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	else
 		pol = MCSPI_POL_HELD_HIGH;
 
-
+	bus_num++;
 	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	slave->bus_num = bus_num++;
 	regs_offset = pdata->regs_offset;
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	memcpy(&cp_res, res, sizeof(struct resource));
@@ -676,7 +675,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
-	sprintf(slave->name, "%s", DRIVER_NAME);
 	ret = devm_spislave_register_slave(&pdev->dev, slave);
 	if (ret) {
 		dev_dbg(&slave->dev, "register device error\n");

@@ -173,7 +173,7 @@ static struct spislave_device *spislave_register_device(struct spi_slave *slave,
 
 	of_node_get(nc);
 	slave_dev->dev.of_node = nc;
-	dev_set_name(&slave_dev->dev, "%s%d", slave->name, slave->bus_num);
+	dev_set_name(&slave_dev->dev, "%s", nc->name);
 	ret = device_register(&slave_dev->dev);
 	if (ret) {
 		dev_dbg(&slave->dev, "register child device erroc\n");
@@ -207,15 +207,14 @@ int spislave_register_devices(struct spi_slave *slave)
 int spislave_register_slave(struct spi_slave *slave, struct device *dev)
 {
 	int ret = 0;
+	struct device_node *node;
 
 	if (!dev)
 		return -ENODEV;
 
-	slave->dev.of_node = dev ? dev->of_node : NULL;
-	dev_set_name(&slave->dev, "%s.%u", slave->name, slave->bus_num);
-
-	if ((slave->bus_num < 0) && slave->dev.of_node)
-		slave->bus_num = of_alias_get_id(slave->dev.of_node, "spi");
+	node = dev->of_node;
+	slave->dev.of_node = dev ? node : NULL;
+	dev_set_name(&slave->dev, "%s", node->name);
 
 	ret = device_add(&slave->dev);
 	if (ret < 0) {

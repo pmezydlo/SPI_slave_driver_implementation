@@ -31,7 +31,7 @@
 
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
-static DEFINE_SPINLOCK(spislave_lock);
+static DEFINE_MUTEX(spislave_dev_list_lock);
 static DEFINE_IDR(spislave_idr);
 static DEFINE_SPINLOCK(spislave_idr_lock);
 
@@ -47,82 +47,88 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
 	struct spi_slave *slave;
-	int error_count = 0;
 	struct spislave_data *data;
+	ssize_t status;
+	unsigned long missing;
 
 	data = filp->private_data;
 	slave = data->slave;
 
-	error_count = copy_to_user(buf, slave->rx, slave->rx_offset);
+	mutex_lock(&slave->buf_lock);
 
-	if (error_count != 0)
-		return -EFAULT;
+	if (count > slave->buf_depth)
+		return -EMSGSIZE;
 
-
-	pr_info("%s: read end count:%d rx_offset:%d\n", DRIVER_NAME,
-		error_count, slave->rx_offset);
+	status = count;
+	missing = copy_to_user(buf, slave->rx, slave->rx_offset);
+	if (missing == status)
+		status = -EFAULT;
+	else
+		status = status - missing;
 
 	slave->rx_offset = 0;
 	memset(slave->rx, 0, slave->buf_depth);
+	mutex_unlock(&slave->buf_lock);
 
-	return 0;
+	return status;
 }
 
 static ssize_t spislave_write(struct file *filp, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
-	ssize_t ret = 0;
+	ssize_t status = 0;
 	struct spi_slave *slave;
 	unsigned long missing;
 	struct spislave_data *data;
 
 	data = filp->private_data;
 	slave = data->slave;
+	mutex_lock(&slave->buf_lock);
+
+	if (count > slave->buf_depth)
+		return -EMSGSIZE;
 
 	memset(slave->tx, 0, slave->buf_depth);
 
 	missing = copy_from_user(slave->tx, buf, count);
 
 	if (missing == 0)
-		ret = count;
+		status = count;
 	else
-		return -EFAULT;
+		status = -EFAULT;
 
 	slave->tx_offset = 0;
 	slave->enable(slave);
 	slave->transfer(slave);
+	mutex_unlock(&slave->buf_lock);
 
-	return ret;
+	return status;
 }
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	int ret = 0;
 	struct spi_slave *slave;
 	struct spislave_data *data;
 
-	spin_lock(&spislave_lock);
+	mutex_lock(&spislave_dev_list_lock);
 
 	data = filp->private_data;
 	slave = data->slave;
 
 	data->users--;
-
-	if (!data->users)
-
-	filp->private_data = NULL;
+	mutex_unlock(&spislave_dev_list_lock);
 	slave->clr_transfer(slave);
 
-	spin_unlock(&spislave_lock);
-
-	return ret;
+	return 0;
 }
 
 static int spislave_open(struct inode *inode, struct file *filp)
 {
-	int ret = -ENXIO;
 	struct spislave_data *data;
 	struct spi_slave *slave;
+	int ret = -ENXIO;
+
+	mutex_lock(&spislave_dev_list_lock);
 
 	list_for_each_entry(data, &spislave_dev_list, device_entry) {
 		if (data->devt == inode->i_rdev) {
@@ -131,43 +137,35 @@ static int spislave_open(struct inode *inode, struct file *filp)
 		}
 	}
 
+	if (ret) {
+		mutex_unlock(&spislave_dev_list_lock);
+		return ret;
+	}
+
 	data->users++;
+	if (data->users > 1)
+		return -EBUSY;
+
 	filp->private_data = data;
 	nonseekable_open(inode, filp);
 	slave = data->slave;
 	init_waitqueue_head(&slave->wait);
+	mutex_unlock(&spislave_dev_list_lock);
 
-	spin_unlock(&spislave_lock);
-
-	return ret;
+	return 0;
 }
 
 static long spislave_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	int ret = 0;
-	int err = 0;
 	struct spi_slave *slave;
 	struct spislave_data *data;
-
-	spin_lock(&spislave_lock);
+	int ret;
 
 	data = filp->private_data;
 	slave = data->slave;
 
-	if (_IOC_TYPE(cmd) != SPISLAVE_IOC_MAGIC)
-		return -ENOTTY;
-
-	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE,
-				 (void __user *)arg, _IOC_SIZE(cmd));
-
-	if (err == 0 && _IOC_DIR(cmd) & _IOC_WRITE)
-		err = !access_ok(VERIFY_WRITE,
-				 (void __user *)arg, _IOC_SIZE(cmd));
-
-	if (err)
-		return -EFAULT;
+	mutex_lock(&slave->buf_lock);
 
 	switch (cmd) {
 	case SPISLAVE_RD_TX_OFFSET:
@@ -230,14 +228,14 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 
 		break;
 	}
-	return ret;
+	mutex_unlock(&slave->buf_lock);
+	return 0;
 }
 
 static unsigned int spislave_event_poll(struct file *filp,
 					struct poll_table_struct *wait)
 {
 	struct spi_slave *slave;
-	unsigned int events = 0;
 	struct spislave_data *data;
 
 	data = filp->private_data;
@@ -245,9 +243,9 @@ static unsigned int spislave_event_poll(struct file *filp,
 
 	poll_wait(filp, &slave->wait, wait);
 	if (slave->rx_offset != 0)
-		events = POLLIN | POLLRDNORM;
+		return POLLIN | POLLRDNORM;
 
-	return events;
+	return 0;
 }
 
 static const struct file_operations spislave_fops = {
@@ -266,6 +264,7 @@ static int spislave_probe(struct spislave_device *spi)
 	struct spislave_data *data;
 	struct spi_slave *slave;
 	struct device *dev;
+	struct device_node *node;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -273,10 +272,17 @@ static int spislave_probe(struct spislave_device *spi)
 
 	slave = spi->slave;
 	data->slave = slave;
+	node = spi->dev.of_node;
 
-	if (slave == NULL)
-		return -ENODEV;
+	if (slave == NULL) {
+		ret = -ENODEV;
+		goto err_out;
+	}
 
+	mutex_init(&slave->buf_lock);
+	INIT_LIST_HEAD(&data->device_entry);
+
+	mutex_lock(&spislave_dev_list_lock);
 	spin_lock(&spislave_idr_lock);
 
 	ret = idr_alloc(&spislave_idr, data, 0, SPISLAVE_MAX_MINOR,
@@ -284,22 +290,31 @@ static int spislave_probe(struct spislave_device *spi)
 
 	spin_unlock(&spislave_idr_lock);
 
-	if (ret < 0)
-		return -EBUSY;
+	if (ret < 0) {
+		ret = -EBUSY;
+		goto err_out;
+	}
 
 	data->id = ret;
-
+	data->users = 0;
 	data->devt = MKDEV(SPISLAVE_MAJOR, data->id);
-	dev = device_create(spislave_class, &spi->dev,
-			    data->devt, data, "%s.%d",
-			    DRIVER_NAME, slave->bus_num);
+	dev = device_create(spislave_class, &spi->dev, data->devt, data, "%s",
+			    node->name);
 
-	if (IS_ERR(&dev))
-		return PTR_ERR(dev);
+	if (IS_ERR(&dev)) {
+		ret =  PTR_ERR(dev);
+		goto err_out;
+	}
 
-	pr_info("zarejstrowano urzadzenie\n");
+	list_add(&data->device_entry, &spislave_dev_list);
 	spislave_set_drv_data(spi, data);
+	mutex_unlock(&spislave_dev_list_lock);
 
+	return 0;
+
+err_out:
+	kfree(data);
+	mutex_unlock(&spislave_dev_list_lock);
 	return ret;
 }
 
@@ -310,9 +325,9 @@ static int spislave_remove(struct spislave_device *spi)
 
 	data->slave = NULL;
 
-	spin_lock(&spislave_lock);
+	mutex_lock(&spislave_dev_list_lock);
 	list_del(&data->device_entry);
-	spin_lock(&spislave_lock);
+	mutex_unlock(&spislave_dev_list_lock);
 
 	device_destroy(spislave_class, data->devt);
 
@@ -340,7 +355,7 @@ static int __init spislave_init(void)
 {
 	int ret = 0;
 
-	ret = register_chrdev(SPISLAVE_MAJOR, "spislave", &spislave_fops);
+	ret = register_chrdev(SPISLAVE_MAJOR, DRIVER_NAME, &spislave_fops);
 	if (ret < 0)
 		return ret;
 

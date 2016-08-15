@@ -20,8 +20,6 @@ struct spi_slave {
 	void __iomem *base;
 	u32 phys_addr;
 	unsigned int reg_offset;
-	s16 bus_num;
-	char name[SPISLAVE_NAME_SIZE];
 
 	unsigned int pin_dir;
 	u32 cs_sensitive;
@@ -42,6 +40,7 @@ struct spi_slave {
 	u32 buf_depth;
 
 	wait_queue_head_t wait;
+	struct mutex buf_lock;
 
 	void (*enable)(struct spi_slave *slave);
 	void (*disable)(struct spi_slave *slave);
