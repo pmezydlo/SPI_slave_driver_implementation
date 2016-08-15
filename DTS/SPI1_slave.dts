@@ -23,14 +23,32 @@
     };
 
     fragment@1 {
-        target = <&spi1>;
+        target = <&ocp>;
         __overlay__ {
-             status = "okay";
-             pinctrl-names = "default";
-             pinctrl-0 = <&spi1_pins_s0>;
-             fifo_depth = <36>;
-             bits_per_word = <16>;
-             cs_sensitive = <1>;
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+	    spislave1: spislave@481a0000 {
+	        compatible = "ti,omap4-mcspi-slave";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x481a0000 0x400>;
+                interrupts = <125>;
+		ti,spi-num-cs = <2>;
+		ti,hwmods = "spi1";
+		dmas = <&edma 42 0
+			&edma 43 0
+			&edma 44 0
+			&edma 45 0>;
+		dma-names = "tx0", "rx0", "tx1", "rx1";
+		status = "okay";
+                pinctrl-names = "default";
+                pinctrl-0 = <&spi1_pins_s0>;
+                spislave@1 {
+                    reg = <0>;
+                    compatible = "linux,spislave";
+                };
+            };
         };
     };
 };

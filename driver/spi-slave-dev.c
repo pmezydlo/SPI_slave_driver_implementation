@@ -27,6 +27,7 @@
 
 #define DRIVER_NAME		"spislavedev"
 #define SPISLAVE_MAJOR		156
+#define SPISLAVE_MAX_MINOR	64
 
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
@@ -39,6 +40,7 @@ struct spislave_data {
 	struct	list_head device_entry;
 	unsigned int users;
 	struct spi_slave *slave;
+	int id;
 };
 
 static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
@@ -263,7 +265,6 @@ static int spislave_probe(struct spislave_device *spi)
 	int ret = 0;
 	struct spislave_data *data;
 	struct spi_slave *slave;
-	int data_id;
 	struct device *dev;
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
@@ -275,26 +276,28 @@ static int spislave_probe(struct spislave_device *spi)
 
 	if (slave == NULL)
 		return -ENODEV;
-	do {
-		if (!idr_pre_get(&spislave_idr, GFP_KERNEL) == 0) {
-			dev_dbg(&slave->dev, "can't reserve idr resources.\n");
-			return -ENOMEM;
-		}
 
-		spin_lock(&spislave_idr_lock);
-		ret = idr_get_new(&spislave_idr, data, &data_id);
-		spin_unlock(&spislave_idr_lock);
-	} while (ret == -EAGAIN);
+	spin_lock(&spislave_idr_lock);
 
+	ret = idr_alloc(&spislave_idr, data, 0, SPISLAVE_MAX_MINOR,
+			     GFP_KERNEL);
 
-	data->devt = MKDEV(SPISLAVE_MAJOR, data_id);
+	spin_unlock(&spislave_idr_lock);
+
+	if (ret < 0)
+		return -EBUSY;
+
+	data->id = ret;
+
+	data->devt = MKDEV(SPISLAVE_MAJOR, data->id);
 	dev = device_create(spislave_class, &spi->dev,
 			    data->devt, data, "%s.%d",
 			    DRIVER_NAME, slave->bus_num);
 
-	if (IS_ERR(&spislave_idr))
+	if (IS_ERR(&dev))
 		return PTR_ERR(dev);
 
+	pr_info("zarejstrowano urzadzenie\n");
 	spislave_set_drv_data(spi, data);
 
 	return ret;

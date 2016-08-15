@@ -9,13 +9,6 @@
     part-number = "spi0pinmux";
 
     fragment@0 {
-        target = <&spi1>;
-        __overlay__ {
-             status = "disabled";
-        };
-    };
-
-    fragment@1 {
         target = <&am33xx_pinmux>;
         __overlay__ {
             spi0_pins_s0: spi0_pins_s0 {
@@ -29,7 +22,7 @@
         };
     };
 
-    fragment@2 {
+    fragment@1 {
         target = <&ocp>;
         __overlay__ {
             #address-cells = <1>;
