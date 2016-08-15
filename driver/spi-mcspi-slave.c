@@ -577,7 +577,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int irq;
 	unsigned int pha;
 	unsigned int pol;
-	static int bus_num = 0;
 
 	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spi_slave));
 	if (slave == NULL)
@@ -618,7 +617,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	else
 		pol = MCSPI_POL_HELD_HIGH;
 
-	bus_num++;
 	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 	regs_offset = pdata->regs_offset;
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
