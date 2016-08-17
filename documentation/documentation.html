@@ -15,6 +15,7 @@
 	<li><a href="#slave-driver-in-linux-architecture">Slave driver in Linux architecture</a></li>	
 	<li><a href="#problems">Problems</a></li>
 	<li><a href="#development-timeline">Development timeline</a></li>
+	<li><a href="#final-raport">Final raport</a></li>
         <li><a href="#photos-from-tests">Photos from tests</a></li>
 	<li><a href="#am335x-and-mcspi-data-sheets">AM335x and McSPI data sheets</a></li>
 	<li><a href="#books-about-linux-and-lkm">Books about Linux and LKM</a></li>
@@ -182,40 +183,142 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 </li>
 <li>
 <p>Week 8(12 July - 17 July)</p><ul>
-	<li>configuring dma channel</li>
-	<li>interrupt for dma</li>
-	<li>create callback functions</li>	
+	<li>configuring dma channel ✔</li>
+	<li>interrupt for dma ✔</li>
+	<li>create callback functions ✔</li>	
 	<li>finally work on DMA</li>
 	<li>tests with DMA without API (printk log)</li></ul>
 </li>
 <li>
 	<p>Week 9(19 July - 26 July)</p><ul>
-	<li>begining work on the framework</li>
-	<li>minor number for charter device</li>
-	<li>create class and device</li> 
-	<li>create IOCTL command</li>
-	<li>structure for sending and receiving data using IOCTL</li></ul>
+<li>work on DMA ✔</li>
+<li>configuration of the DMA transfer (filling config structure) ✔</li>
+<li>added callback function ✔</li>
+<li>enable and disable DMA request ✔</li>
+<li>DMA channel request (old way) ✔</li>
+<li>clearing DMA source ✔</li>
+</ul>
 </li>
 <li>
 	<p>Week 10(26 July - 02 August)</p><ul>
-	<li>create mutex for writing and reading</li>
-	<li>asynchronous events for realization flag of notifications</li>
-	<li>finally write framework</li></ul>
+<li>familiarizing myself with Buses ✔</li>
+<li>debugging dma ✔</li>
+<li>testing the driver in the 3.8.x version of the image (at the request of a colleague who is interested the driver) ✔</li>
+</ul>
 </li>
 <li>
 	<p>Week 11(02 August - 09 August)</p>
-	<ul><li>documentation, tutorials and examples for SPI Slave framework</li>
-	<li>create a make script to compile and install in linux</li> 
-	<li>more tests</li></ul>
+	<ul><li>reated a new driver (spi-slave-core.ko) which manages bus ✔</li>
+<li>created a new device (spi-slave-dev.ko) which manages fs operations ✔</li>
+<li>added register and unregister spislave bus, devices and driver ✔</li>
+<li>created functions for the registration of other slaves (more generic framework) ✔</li>
+<li>matched device and driver after modalias ✔</li>
+<li>registered device which child node is located in DTS file ✔</li>
+<li>cleaned up code ✔</li>
+<li>prepared code for review by the linux maintainers (thanks Michael for this) ✔</li></ul>
 </li>
 <li>
 	<p>Week 12(09 August - 20 August)</p>
-	<ul><li>clean up code</li>
-	<li>latest tests</li> 
-	<li>documentation, tutorials and examples</li></ul>
+	<ul><li>clean up code✔</li>
+	<li>latest tests ✔</li> 
+	<li>final raport ✔</li>
+	<li>added headers with author and licence in the top of each file ✔</li>
+	<li>corrected all inputs and outputs ✔</li>
+	<li>BITMAP has been replaced with idr struct ✔</li>
+	<li>mutexes and spinlocks ✔</li>
+	<li>documentation, tutorials and examples ✔</li></ul>
 </li>
 
 </ol>
+
+
+<h2 id="final-raport">Final raport</h2>
+<p>The project’s initial version involved the creation of SPI driver in slave mode. The first implementation 
+of realized framework was supposed to be SPI Flash Emulator. To ensure optimal performance, the 
+driver was meant to use SPI controller, DMA and interrupt. </p>
+  
+<p>After contacting linux-spi and finding Marek Vašut, a developer who already had experience with 
+SPI slave drivers, we had a constructive exchange of ideas. Marek introduced me to many
+ critical elements. Michael noticed a limitation that made it impossible to create a fully generic 
+slave driver. The project needed a thorough reconstruction.</p>
+
+<p>The project consists of three layers. The first and the lowest layer supports the SPI hardware controller. 
+McSPI controller is located in BeagleBone Black, and the driver was developed exactly to this controller. 
+The whole implementation is located in spi-mcspi-slave.c[1] file. The controller easily handles small 
+transfers to 32 bytes with clock to 24 MHz. It supports a variety of word lengths, from 4 bits to 32 bits per word. 
+DMA was supposed to provide support for longer transfer lengths; however, I was not able to develop it 
+before the end of GSoC. DMA support will be added after GSoC.</p>
+
+<p>The second layer is responsible for communication between the lowest layer and userspace. This layer 
+consists of a core (bus) which connects the device and driver. It is a bus and a set of functions registering 
+and managing other SPI slave devices. It was implemented in files spi-slave-core.c [2] and spi-slave-core.h 
+[3]. Framework uses device tree overlay. On the basis of DTB, it matches the device to the driver. I have
+created two files dts for McSPI 0 slave.dts [4] and SPI1_slave.dts [5].</p>
+
+<p>A simple user interface, allowing to carry out the transfer has been added in spi-slave-dev.c [6]
+and spi-slave-dev.h[7] files. For each installed device, the driver provides file in userspace 
+(/dev/spislave0 and /dev/spislave1). The driver has the usual fs operations and a number of IOCTL
+functions (described in more detail in spi-slave-dev.h [7]), as well as POLL methods used to inform
+about the end of transaction.</p>
+
+<p>I have added a simple spislave_app.c [8] application, which is using SPI slave framework.
+It is a good example on how to use SPI slave.</p>
+
+<p>Documentation located on wiki page [9] and in the documentation directory [10] in repository 
+describes the driver, clarifies and explains its limitations and shows the main problems 
+because of which a fully generic spi driver in slave mode is difficult to obtain. It also 
+provides information concerning work plan for each GSoC week. Moreover, it shows 
+stage by stage how to compile, install and use the framework, as well as the way the 
+master is connected to the slave on example of BeagleBoard Black.</p>
+
+<ul>	
+	<li>[1]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/driver/spi-mcspi-slave.c">spi-mcspi-slave.c</a></li>
+	<li>[2]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/driver/spi-slave-core.c">spi-slave-core.c</a></li>
+	<li>[3]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/driver/spi-slave-core.h">spi-slave-core.h</a></li>
+	<li>[4]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/DTS/SPI0_slave.dts">SPI0_slave.dts</a></li>
+	<li>[5]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/DTS/SPI1_slave.dts">SPI1_slave.dts</a></li>
+	<li>[6]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/driver/spi-slave-dev.c">spi-slave-dev.c</a></li>
+	<li>[7]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/driver/api-slave-dev.h">api-slave-dev.h</a></li>
+	<li>[8]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/blob/master/slave_app/slave_app.c">slave_app.c</a></li>
+	<li>[9]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/wiki"></a>wiki</li>
+	<li>[10]<a href="https://github.com/pmezydlo/SPI_slave_driver_implementation/tree/master/documentation">documentation/</a></li>
+
+</ul>
+
+<h3>What did not work and why:</h3>
+DMA is the only part of the project which -  despite being planned to be involved in the project’s 
+final version  - was not successful. DMA was supposed to provide support for transactions larger
+than 32 bytes. Support for DMA has been written, however, I could not merge it. This is the
+element that I am going to add after GSoC, for it proved to be too difficult for such limited time.
+
+<h3>What I have learned during GSoC:</h3>
+<ul><li>upstream process and interaction with maintainers</li>
+<li>how to create a variety of types of modules connected to the linux kernel</li>
+<li>handling devices mapped in memory</li>
+<li>creating a correct and visually aesthetic code compatible with the linux kernel coding style</li>
+<li>planning and describing a project </li>
+<li>how bus, device and driver work</li>
+<li>character device drivers and fs operations in practice</li>
+<li>methods for debugging and fault finding</li>
+<li>better git use</li>
+<li>and many more ;)</li></ul>
+
+<h3>What's next:</h3>
+Currently I am after third review of my code. Greg pointed to many mistakes and provided me with
+valuable advices, so my code looks a lot better now. I learned a lot thanks to his help. 
+As for upstream code for kernel, I am quite skeptical. It is difficult and my code does not necessarily 
+correspond to the image of SPI slave preferred by linux-spi. Nevertheless, I still wish to continue work
+on this code. We will see what happens.
+
+<h3>A few words in conclusion:</h3>
+The final report does not end my adventure with linux kernel and BeagleBoard community. These three 
+months have shown me that writing elements of Linux is not quite that difficult. I have also met a great 
+BeagleBoard community and I have got to know many wonderful people. I would like to thank Michael for
+rescuing me when I got stuck and for such great amount of knowledge he shared with me. I’m especially 
+thankful for Andrew for his support during the draft preparation. Many thanks to everyone who helped and 
+supported me during GSoC. You are amazing.
+
+
 <h2 id="photos-from-tests">Photos from tests</h2>	
 <img src="pio_2MHz_img.png" alt="PIO test 2MHz" width="700" height="450"/>	
 <img src="pio_10MHz_img.png" alt="PIO test 10MHz" width="700" height="450"/>	
@@ -334,9 +437,9 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 	<h3>Upload spi slave driver, dtb and slave application on BB board:</h3>
 	<ol>
 	<li>Upload using SCP:</li>	
-	<pre>$ scp driver/spi-mcspi-slave.ko  root@192.168.137.2:/root</pre>
-	<pre>$ scp slave_app/slave_app  root@192.168.137.2:/root</pre>
-	<pre>$ scp DTS/SPI0_slave-00A0.dtbo  root@192.168.137.2:/lib/firmware</pre>
+	<pre>$ scp driver/*.ko  root@192.168.7.2:/root</pre>
+	<pre>$ scp slave_app/slave_app  root@192.168.7.2:/root</pre>
+	<pre>$ scp DTS/SPI0_slave-00A0.dtbo  root@192.168.7.2:/lib/firmware</pre>
 	</ol>
 </ol>
 
@@ -360,11 +463,16 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <ol>
 	<h3>Installing driver:</h3>
 	<ol><li>Command insmod:</li>
+	<pre>insmod spi-slave-core.ko </pre>
+	<pre>insmod spi-mcspi-dev.ko </pre>
 	<pre>insmod spi-mcspi-slave.ko </pre>
 	<li>Checking:</li>
 	<pre>$ lsmod</pre>	
 	<pre>Module                  Size  Used by</pre>
-	<pre>spi_mcspi_slave        10781  0 </pre></ol>
+	<pre>spi_mcspi_slave         6562  0 </pre>
+	<pre>spi_slave_dev           4307  0 </pre>
+	<pre>spi_slave_core          6046  2 spi_slave_dev,spi_mcspi_slave</pre>
+
 </ol>
 
 
@@ -372,7 +480,7 @@ functions to call by protocol drivers, and then a top protocol driver layer whic
 <h2 id="first-data-transfer">First data transfer</h2>	
 <ol>
 	<li>Run SPI slave application:</li>
-	<pre>./slave_app --w --r</pre>
+	<pre>./slave_app --w --r -d /dev/spislave0</pre>
 	<li>Application and driver waiting for the data, connect the master and make your first transfer!!!</li>
 </ol>
 <img src="pio_con.png" alt="pio console"/>
