@@ -66,8 +66,6 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	else
 		status = status - missing;
 
-	slave->rx_offset = 0;
-	memset(slave->rx, 0, slave->buf_depth);
 	mutex_unlock(&slave->buf_lock);
 
 	return status;
@@ -97,9 +95,6 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 	else
 		status = -EFAULT;
 
-	slave->tx_offset = 0;
-	slave->enable(slave);
-	slave->transfer(slave);
 	mutex_unlock(&slave->buf_lock);
 
 	return status;
@@ -320,7 +315,6 @@ err_out:
 
 static int spislave_remove(struct spislave_device *spi)
 {
-	int ret = 0;
 	struct spislave_data *data = spislave_get_drv_data(spi);
 
 	data->slave = NULL;
@@ -333,7 +327,7 @@ static int spislave_remove(struct spislave_device *spi)
 
 	kfree(data);
 
-	return ret;
+	return 0;
 }
 
 static const struct of_device_id spislave_dt_ids[] = {

@@ -19,13 +19,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
-#include <linux/of.h>
-#include <linux/fs.h>
-#include <linux/ioctl.h>
 #include <linux/uaccess.h>
-#include <linux/wait.h>
-#include <linux/poll.h>
-#include <linux/sched.h>
 
 #define DRIVER_NAME "spi-mcspi-slave"
 
@@ -127,18 +121,18 @@
 #define MCSPI_CHSTAT_TXFFF			BIT(4)
 #define MCSPI_CHSTAT_TXFFE			BIT(3)
 
-static inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
+unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
 	return ioread32(base + idx);
 }
 
-static inline void mcspi_slave_write_reg(void __iomem *base,
+void mcspi_slave_write_reg(void __iomem *base,
 		u32 idx, u32 val)
 {
 	iowrite32(val, base + idx);
 }
 
-static inline int mcspi_slave_bytes_per_word(int word_len)
+int mcspi_slave_bytes_per_word(int word_len)
 {
 	if (word_len <= 8)
 		return 1;
@@ -148,7 +142,7 @@ static inline int mcspi_slave_bytes_per_word(int word_len)
 		return 4;
 }
 
-static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
+int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 {
 	unsigned long timeout;
 
@@ -164,25 +158,25 @@ static int mcspi_slave_wait_for_bit(void __iomem *reg, u32 bit)
 	return 0;
 }
 
-static void mcspi_slave_enable(struct spi_slave *slave)
+void mcspi_slave_enable(struct spi_slave *slave)
 {
-	u32 l;
+	u32 val;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
-	l |= MCSPI_CHCTRL_EN;
-	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
+	val |= MCSPI_CHCTRL_EN;
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, val);
 }
 
-static void mcspi_slave_disable(struct spi_slave *slave)
+void mcspi_slave_disable(struct spi_slave *slave)
 {
-	u32 l;
+	u32 val;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
-	l &= ~MCSPI_CHCTRL_EN;
-	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, l);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0CTRL);
+	val &= ~MCSPI_CHCTRL_EN;
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CTRL, val);
 }
 
-static void mcspi_slave_pio_rx_transfer(unsigned long data)
+void mcspi_slave_pio_rx_transfer(unsigned long data)
 {
 	struct spi_slave *slave;
 	unsigned int c;
@@ -203,27 +197,12 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 		return;
 	}
 
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
-	u8 *rx;
+	switch (mcspi_slave_bytes_per_word(slave->bits_per_word)) {
+	case 1: {
+		u8 *rx;
 
-	rx = slave->rx + slave->rx_offset;
-	slave->rx_offset += (sizeof(u8) * c);
-
-		do {
-			c -= 1;
-			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
-						     < 0)
-				goto out;
-
-			*rx++ = readl_relaxed(rx_reg);
-		} while (c);
-	}
-
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
-	u16 *rx;
-
-	rx = slave->rx + slave->rx_offset;
-	slave->rx_offset += (sizeof(u16) * c);
+		rx = slave->rx + slave->rx_offset;
+		slave->rx_offset += (sizeof(u8) * c);
 
 		do {
 			c -= 1;
@@ -233,13 +212,13 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 
 			*rx++ = readl_relaxed(rx_reg);
 		} while (c);
-	}
+	} break;
 
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
-	u32 *rx;
+	case  2: {
+		u16 *rx;
 
-	rx = slave->rx + slave->rx_offset;
-	slave->rx_offset += (sizeof(u32) * c);
+		rx = slave->rx + slave->rx_offset;
+		slave->rx_offset += (sizeof(u16) * c);
 
 		do {
 			c -= 1;
@@ -249,6 +228,26 @@ static void mcspi_slave_pio_rx_transfer(unsigned long data)
 
 			*rx++ = readl_relaxed(rx_reg);
 		} while (c);
+	} break;
+
+	case 4: {
+		u32 *rx;
+
+		rx = slave->rx + slave->rx_offset;
+		slave->rx_offset += (sizeof(u32) * c);
+
+		do {
+			c -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+		} while (c);
+	} break;
+
+	default:
+		return;
 	}
 
 	return;
@@ -257,7 +256,7 @@ out:
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
-static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
+void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 {
 	unsigned int c;
 	void __iomem *tx_reg;
@@ -279,7 +278,8 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 		return;
 	}
 
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 1) {
+	switch (mcspi_slave_bytes_per_word(slave->bits_per_word)) {
+	case 1: {
 		const u8 *tx;
 
 		tx = slave->tx + slave->tx_offset;
@@ -293,9 +293,9 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
-	}
+	} break;
 
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 2) {
+	case 2: {
 		const u16 *tx;
 
 		tx = slave->tx + slave->tx_offset;
@@ -309,9 +309,9 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
-	}
+	} break;
 
-	if (mcspi_slave_bytes_per_word(slave->bits_per_word) == 4) {
+	case 4: {
 		const u32 *tx;
 
 		tx = slave->tx + slave->tx_offset;
@@ -325,6 +325,10 @@ static void mcspi_slave_pio_tx_transfer(struct spi_slave *slave)
 
 			writel_relaxed(*tx++, tx_reg);
 		} while (c);
+	} break;
+
+	default:
+		return;
 	}
 
 	return;
@@ -332,42 +336,42 @@ out:
 	dev_dbg(&slave->dev, "timeout!!!\n");
 }
 
-static irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
+irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
 	struct spi_slave *slave = dev_id;
-	u32 l;
+	u32 val;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
 
-	if (l & MCSPI_CHSTAT_EOT) {
+	if (val & MCSPI_CHSTAT_EOT) {
 		wake_up_interruptible(&slave->wait);
 		mcspi_slave_disable(slave);
 	}
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_IRQSTATUS);
 
-	if (l & MCSPI_IRQ_RX_FULL) {
-		l |= MCSPI_IRQ_RX_FULL;
+	if (val & MCSPI_IRQ_RX_FULL) {
+		val |= MCSPI_IRQ_RX_FULL;
 		pio_rx_tasklet.data = (unsigned long)slave;
 		tasklet_schedule(&pio_rx_tasklet);
 	}
 
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQSTATUS, val);
 	return (irq_handler_t) IRQ_HANDLED;
 }
 
-static int mcspi_slave_set_irq(struct spi_slave *slave)
+int mcspi_slave_set_irq(struct spi_slave *slave)
 {
-	u32 l;
-	int ret = 0;
+	u32 val;
+	int ret;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_IRQENABLE);
 
-	l &= ~MCSPI_IRQ_RX_FULL;
-	l &= ~MCSPI_IRQ_TX_EMPTY;
-	l |= MCSPI_IRQ_RX_FULL;
+	val &= ~MCSPI_IRQ_RX_FULL;
+	val &= ~MCSPI_IRQ_TX_EMPTY;
+	val |= MCSPI_IRQ_RX_FULL;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_IRQENABLE, val);
 
 	ret = devm_request_irq(&slave->dev, slave->irq,
 				(irq_handler_t)mcspi_slave_irq,
@@ -375,16 +379,15 @@ static int mcspi_slave_set_irq(struct spi_slave *slave)
 				DRIVER_NAME, slave);
 	if (ret) {
 		dev_dbg(&slave->dev, "unable to request irq:%d\n", slave->irq);
-		ret = -EINTR;
+		return -EINTR;
 	}
 
-	return ret;
+	return 0;
 }
 
-static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
+int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 {
-	u32 l;
-	int ret = 0;
+	u32 val;
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM) {
 		slave->tx = kzalloc(slave->buf_depth, GFP_KERNEL);
@@ -398,51 +401,49 @@ static int mcspi_slave_setup_pio_transfer(struct spi_slave *slave)
 			return -ENOMEM;
 	}
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_XFERLEVEL);
 
-	l &= ~MCSPI_XFER_AEL;
-	l &= ~MCSPI_XFER_AFL;
+	val &= ~MCSPI_XFER_AEL;
+	val &= ~MCSPI_XFER_AFL;
 
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l  |= (slave->bytes_per_load - 1) << 8;
+		val  |= (slave->bytes_per_load - 1) << 8;
 
-	l &= ~MCSPI_XFER_WCNT;
+	val &= ~MCSPI_XFER_WCNT;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_XFERLEVEL, val);
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
-	l &= ~MCSPI_CHCONF_TRM;
+	val &= ~MCSPI_CHCONF_TRM;
 
 	if (slave->mode == MCSPI_MODE_RM)
-		l |= MCSPI_CHCONF_RM;
+		val |= MCSPI_CHCONF_RM;
 	else if (slave->mode == MCSPI_MODE_TM)
-		l |= MCSPI_CHCONF_TM;
+		val |= MCSPI_CHCONF_TM;
 
-	l &= ~MCSPI_CHCONF_WL;
-	l |= (slave->bits_per_word - 1) << 7;
+	val &= ~MCSPI_CHCONF_WL;
+	val |= (slave->bits_per_word - 1) << 7;
 
-	l &= ~MCSPI_CHCONF_FFER;
-	l &= ~MCSPI_CHCONF_FFEW;
+	val &= ~MCSPI_CHCONF_FFER;
+	val &= ~MCSPI_CHCONF_FFEW;
 
 	if (slave->mode == MCSPI_MODE_RM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_CHCONF_FFER;
+		val |= MCSPI_CHCONF_FFER;
 
 	if (slave->mode == MCSPI_MODE_TM || slave->mode == MCSPI_MODE_TRM)
-		l |= MCSPI_CHCONF_FFEW;
+		val |= MCSPI_CHCONF_FFEW;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
-	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
-	l &= ~MCSPI_MODULCTRL_FDAA;
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, val);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+	val &= ~MCSPI_MODULCTRL_FDAA;
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, val);
 
-	return ret;
+	return 0;
 }
 
-static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
+void mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 {
-	int ret = 0;
-
 	if (slave->tx != NULL)
 		kfree(slave->tx);
 
@@ -450,76 +451,71 @@ static int mcspi_slave_clr_pio_transfer(struct spi_slave *slave)
 		kfree(slave->rx);
 
 	mcspi_slave_disable(slave);
-
-	return ret;
 }
 
-static void mcspi_slave_set_slave_mode(struct spi_slave *slave)
+void mcspi_slave_set_slave_mode(struct spi_slave *slave)
 {
-	u32 l;
+	u32 val;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
-	l |= MCSPI_MODULCTRL_MS;
+	val |= MCSPI_MODULCTRL_MS;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, val);
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
-	l &= ~MCSPI_CHCONF_PHA;
-	l &= ~MCSPI_CHCONF_POL;
+	val &= ~MCSPI_CHCONF_PHA;
+	val &= ~MCSPI_CHCONF_POL;
 
 	if (slave->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
-		l &= ~MCSPI_CHCONF_IS;
-		l &= ~MCSPI_CHCONF_DPE1;
-		l |= MCSPI_CHCONF_DPE0;
+		val &= ~MCSPI_CHCONF_IS;
+		val &= ~MCSPI_CHCONF_DPE1;
+		val |= MCSPI_CHCONF_DPE0;
 	} else {
-		l |= MCSPI_CHCONF_IS;
-		l |= MCSPI_CHCONF_DPE1;
-		l &= ~MCSPI_CHCONF_DPE0;
+		val |= MCSPI_CHCONF_IS;
+		val |= MCSPI_CHCONF_DPE1;
+		val &= ~MCSPI_CHCONF_DPE0;
 	}
 
 	if (slave->pol == MCSPI_POL_HELD_HIGH)
-		l &= ~MCSPI_CHCONF_POL;
+		val &= ~MCSPI_CHCONF_POL;
 	else
-		l |= MCSPI_CHCONF_POL;
+		val |= MCSPI_CHCONF_POL;
 
 	if (slave->pha == MCSPI_PHA_ODD_NUMBERED_EDGES)
-		l &= ~MCSPI_CHCONF_PHA;
+		val &= ~MCSPI_CHCONF_PHA;
 	else
-		l |= MCSPI_CHCONF_PHA;
+		val |= MCSPI_CHCONF_PHA;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, val);
 }
 
-static void mcspi_slave_set_cs(struct spi_slave *slave)
+void mcspi_slave_set_cs(struct spi_slave *slave)
 {
-	u32 l;
+	u32 val;
 
-	l = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0CONF);
 
 	if (slave->cs_polarity == MCSPI_CS_POLARITY_ACTIVE_LOW)
-		l |= MCSPI_CHCONF_EPOL;
+		val |= MCSPI_CHCONF_EPOL;
 	else
-		l &= ~MCSPI_CHCONF_EPOL;
+		val &= ~MCSPI_CHCONF_EPOL;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, l);
-	l = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
+	mcspi_slave_write_reg(slave->base, MCSPI_CH0CONF, val);
+	val = mcspi_slave_read_reg(slave->base, MCSPI_MODULCTRL);
 
 	if (slave->cs_sensitive == MCSPI_CS_SENSITIVE_ENABLED)
-		l &= ~MCSPI_MODULCTRL_PIN34;
+		val &= ~MCSPI_MODULCTRL_PIN34;
 	else
-		l |= MCSPI_MODULCTRL_PIN34;
+		val |= MCSPI_MODULCTRL_PIN34;
 
-	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, l);
+	mcspi_slave_write_reg(slave->base, MCSPI_MODULCTRL, val);
 }
 
-static int mcspi_slave_setup(struct spi_slave *slave)
+int mcspi_slave_setup(struct spi_slave *slave)
 {
 	int ret = 0;
-	u32 l;
-
-	l = mcspi_slave_read_reg(slave->base, MCSPI_SYSSTATUS);
 
 	if (mcspi_slave_wait_for_bit(slave->base + MCSPI_SYSSTATUS,
 					      MCSPI_SYSSTATUS_RESETDONE) != 0) {
@@ -533,12 +529,12 @@ static int mcspi_slave_setup(struct spi_slave *slave)
 		ret = mcspi_slave_set_irq(slave);
 
 		if (ret < 0)
-			return ret;
+			return -EINTR;
 
 	return ret;
 }
 
-static void mcspi_slave_clean_up(struct spi_slave *slave)
+void mcspi_slave_clean_up(struct spi_slave *slave)
 {
 	tasklet_kill(&pio_rx_tasklet);
 
@@ -549,11 +545,20 @@ static void mcspi_slave_clean_up(struct spi_slave *slave)
 		kfree(slave->rx);
 }
 
-static struct omap2_mcspi_platform_config mcspi_slave_pdata = {
+void mcspi_slave_enable_transfer(struct spi_slave *slave)
+{
+	slave->rx_offset = 0;
+	memset(slave->rx, 0, slave->buf_depth);
+	slave->tx_offset = 0;
+	mcspi_slave_enable(slave);
+	mcspi_slave_pio_tx_transfer(slave);
+}
+
+struct omap2_mcspi_platform_config mcspi_slave_pdata = {
 	.regs_offset	= OMAP4_MCSPI_REG_OFFSET,
 };
 
-static const struct of_device_id mcspi_slave_of_match[] = {
+const struct of_device_id mcspi_slave_of_match[] = {
 	{
 		.compatible = "ti,omap4-mcspi-slave",
 		.data = &mcspi_slave_pdata,
@@ -652,11 +657,10 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	slave->bytes_per_load = SPI_SLAVE_COPY_LENGTH;
 	slave->bits_per_word = SPI_SLAVE_BITS_PER_WORD;
 
-	slave->enable = mcspi_slave_enable;
+	slave->enable = mcspi_slave_enable_transfer;
 	slave->disable = mcspi_slave_disable;
 	slave->set_transfer = mcspi_slave_setup_pio_transfer;
 	slave->clr_transfer = mcspi_slave_clr_pio_transfer;
-	slave->transfer = mcspi_slave_pio_tx_transfer;
 
 	platform_set_drvdata(pdev, slave);
 

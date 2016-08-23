@@ -45,8 +45,7 @@ struct spi_slave {
 	void (*enable)(struct spi_slave *slave);
 	void (*disable)(struct spi_slave *slave);
 	int (*set_transfer)(struct spi_slave *slave);
-	int (*clr_transfer)(struct spi_slave *slave);
-	void (*transfer)(struct spi_slave *slave);
+	void (*clr_transfer)(struct spi_slave *slave);
 };
 
 struct spislave_device_id {
@@ -69,7 +68,6 @@ struct spislave_driver {
 
 extern int spislave_register_driver(struct spislave_driver *sdrv);
 extern void spislave_unregister_driver(struct spislave_driver *sdrv);
-
 extern int devm_spislave_register_slave(struct device *dev,
 					struct spi_slave *slave);
 extern void spislave_unregister_device(struct spislave_device *dev);

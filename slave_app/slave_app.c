@@ -5,35 +5,30 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/types.h>
+#include <linux/types.h>
 #include "../driver/spi-slave-dev.h"
 #include <sys/poll.h>
 
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
 
-#define SPI_TRM		0/*receive and transmit mode*/
-#define SPI_RM		1/*only receive mode*/
-#define SPI_TM		2/*only transmit mode*/
+static const char *device = "/dev/spislave0";
 
-static const char	*device = "/dev/spislave1";
+static uint8_t read_flag;
+static uint8_t write_flag;
 
-static uint8_t		read_flag;
-static uint8_t		write_flag;
-
-static uint32_t		tx_offset;
-static uint32_t		rx_offset;
-static uint32_t		bits_per_word = 8;
-static uint32_t		mode;
-static uint32_t		buf_depth = 64;
-static uint32_t		bytes_per_load = 4;
+static uint32_t tx_offset;
+static uint32_t rx_offset;
+static uint32_t bits_per_word = 8;
+static uint32_t mode;
+static uint32_t buf_depth = 64;
+static uint32_t bytes_per_load = 4;
 
 static int transfer_8bit(int fd)
 {
-	int		ret = 0;
-	/*uint8_t tx[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x21, 0x82, 0x13};*/
-	uint8_t tx[] = {'K', 'i', 'n', 'g', 'a', ' ', '<', '3', '0'};
-	int		i;
+	int ret = 0;
+	uint8_t tx[] = {'D', 'E', 'A', 'D', 'B', 'E', 'F', 'F'};
+	int i;
 
 	ret = write(fd, tx, TX_ARRAY_SIZE);
 
@@ -56,10 +51,10 @@ static int transfer_8bit(int fd)
 
 static int read_8bit(int fd)
 {
-	uint8_t		rx[RX_ARRAY_SIZE];
-	int		ret;
-	int		i;
-	uint32_t	length;
+	uint8_t rx[RX_ARRAY_SIZE];
+	int ret;
+	int i;
+	uint32_t length;
 
 	printf("Receive:\n");
 
@@ -86,7 +81,7 @@ static int read_8bit(int fd)
 
 static int put_setting(int fd)
 {
-	int		ret = 0;
+	int ret = 0;
 
 	ret = ioctl(fd, SPISLAVE_WR_BITS_PER_WORD, &bits_per_word);
 	if (ret == -1)
@@ -148,10 +143,8 @@ static void print_setting(void)
 
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [-drwbmlpe?]\n", prog);
+	printf("Usage: %s [-dbmlpe?]\n", prog);
 	puts("  -d --device	device to use (default /dev/spislave1\n"
-	     "  -r --read	reads the received data from device\n"
-	     "  -w --write	writes data to send\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
 	     "  -o  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
 	     "  -?  --help	print halp\n"
@@ -171,8 +164,6 @@ static void parse_opts(int argc, char *argv[])
 	while (1) {
 		static const struct option lopts[] = {
 			{ "device", required_argument,	0, 'd' },
-			{ "read",   no_argument,	0, 'r' },
-			{ "write",  no_argument,	0, 'w' },
 			{ "bpw",    required_argument,	0, 'b' },
 			{ "mode",   required_argument,	0, '0' },
 			{ "bpl",    required_argument,  0, 'p' },
@@ -182,7 +173,7 @@ static void parse_opts(int argc, char *argv[])
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:r:w:b:o:p:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:b:o:p:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -220,10 +211,10 @@ static void parse_opts(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-	int			ret = 0;
-	int			i;
-	int			timeout = 30000; /*timeout in msec*/
-	struct pollfd		pollfds;
+	int ret = 0;
+	int i;
+	int timeout = 3000000; /*timeout in msec*/
+	struct pollfd pollfds;
 
 	read_flag = write_flag = 0;
 
@@ -242,145 +233,53 @@ int main(int argc, char *argv[])
 
 	print_setting();
 
-	if (write_flag && mode == SPI_TRM) {
-		ret = put_setting(pollfds.fd);
-		if (ret == -1) {
-			printf("Can't put setting!!\n");
-			return -1;
-		}
+	ret = put_setting(pollfds.fd);
+	if (ret == -1)
+		return -1;
 
-		ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
-		if (ret == -1) {
-			printf("Cant't call set transfer\n");
-			return -1;
-		}
+	ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
+	if (ret == -1)
+		return -1;
 
-		ret = transfer_8bit(pollfds.fd);
-		if (ret == -1) {
-			printf("Can't put msg\n");
-			return -1;
-		}
-	}
+	ret = transfer_8bit(pollfds.fd);
+	if (ret == -1)
+		return -1;
 
-	if (read_flag && mode == SPI_TRM) {
-		while (1) {
-			ret = poll(&pollfds, 1, timeout);
+	ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
+	if (ret == -1)
+		return -1;
 
-			switch (ret) {
-			case 0:
-				printf("timeout\n");
-				break;
+	while (1) {
+		ret = poll(&pollfds, 1, timeout);
 
-			case -1:
-				printf("poll error\n");
-				exit(1);
+		switch (ret) {
+		case 0:
+			printf("timeout\n");
+			exit(1);
+			break;
 
-			default:
-				if (pollfds.revents & POLLIN) {
-					ret = read_8bit(pollfds.fd);
+		case -1:
+			printf("poll error\n");
+			exit(1);
+			break;
 
-					if (ret < 0) {
-						printf("Failed to reads!\n");
-						return -1;
-					}
-					exit(0);
+		default:
+			if (pollfds.revents & POLLIN & POLLRDNORM) {
+				ret = read_8bit(pollfds.fd);
+
+				if (ret < 0) {
+					printf("Failed to reads!\n");
+					return -1;
 				}
-				break;
+				exit(0);
 			}
-		}
-
-		ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
-		if (ret == -1) {
-			printf("Can't call clr transfer\n");
-			return -1;
+			break;
 		}
 	}
 
-	if (read_flag && mode == SPI_RM) {
-		ret = put_setting(pollfds.fd);
-		if (ret == -1) {
-			printf("Can't put setting!!\n");
-			return -1;
-		}
-
-		ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
-		if (ret == -1) {
-			printf("Cant't call set transfer\n");
-			return -1;
-		}
-
-		while (1) {
-			ret = poll(&pollfds, 1, timeout);
-
-			switch (ret) {
-			case 0:
-				printf("timeout\n");
-				break;
-
-			case -1:
-				printf("poll error\n");
-				exit(1);
-
-			default:
-				if (pollfds.revents & POLLIN) {
-					ret = read_8bit(pollfds.fd);
-
-					if (ret < 0) {
-						printf("Failed to reads!\n");
-						return -1;
-					}
-					exit(0);
-				}
-				break;
-			}
-		}
-	}
-
-
-	if (write_flag && mode == SPI_TM) {
-		ret = put_setting(pollfds.fd);
-		if (ret == -1) {
-			printf("Can't put setting!!\n");
-			return -1;
-		}
-
-		ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
-		if (ret == -1) {
-			printf("Cant't call set transfer\n");
-			return -1;
-		}
-
-		ret = transfer_8bit(pollfds.fd);
-		if (ret == -1) {
-			printf("Can't put msg\n");
-			return -1;
-		}
-		while (1) {
-			ret = poll(&pollfds, 1, timeout);
-
-			switch (ret) {
-			case 0:
-				printf("timeout\n");
-				break;
-
-			case -1:
-				printf("poll error\n");
-				exit(1);
-
-			default:
-				if (pollfds.revents & POLLIN) {
-					printf("Transmit successful!\n");
-
-					if (ret < 0) {
-						printf("Failed to reads!\n");
-						return -1;
-					}
-					exit(0);
-				}
-				break;
-			}
-		}
-	}
+	ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
+	if (ret == -1)
+		return -1;
 
 	return ret;
 }

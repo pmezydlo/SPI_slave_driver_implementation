@@ -40,7 +40,6 @@ script:
 
   - cd $DST_PROJECT/
 
-  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f test_master_app/*
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/*
   - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/* 
 

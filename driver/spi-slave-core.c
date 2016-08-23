@@ -148,7 +148,7 @@ static struct spislave_device *spislave_register_device(struct spi_slave *slave,
 							struct device_node *nc)
 {
 	struct spislave_device *slave_dev;
-	int ret = 0;
+	int ret;
 
 	dev_dbg(&slave->dev, "chid node is found: %s\n", nc->full_name);
 
