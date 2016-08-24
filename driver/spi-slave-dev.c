@@ -21,6 +21,7 @@
 #include <linux/compat.h>
 #include <linux/uaccess.h>
 #include <linux/poll.h>
+#include <asm/current.h>
 
 #include "spi-slave-dev.h"
 #include "spi-slave-core.h"
@@ -50,9 +51,32 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	struct spislave_data *data;
 	ssize_t status;
 	unsigned long missing;
+	DECLARE_WAITQUEUE(wait, current);
+	unsigned long flags;
 
 	data = filp->private_data;
 	slave = data->slave;
+
+	spin_lock_irqsave(&slave->wait_lock, flags);
+
+	if (filp->f_flags & O_NONBLOCK) {
+		spin_unlock_irqrestore(&slave->wait_lock, flags);
+		return -EAGAIN;
+	}
+
+	add_wait_queue(&slave->wait, &wait);
+	for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
+		if (signal_pending(current))
+			break;
+
+		spin_unlock_irqrestore(&slave->wait_lock, flags);
+		schedule();
+		spin_lock_irqsave(&slave->wait_lock, flags);
+	}
+	set_current_state(TASK_RUNNING);
+	remove_wait_queue(&slave->wait, &wait);
+	spin_unlock_irqrestore(&slave->wait_lock, flags);
 
 	mutex_lock(&slave->buf_lock);
 
@@ -144,6 +168,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	filp->private_data = data;
 	nonseekable_open(inode, filp);
 	slave = data->slave;
+	spin_lock_init(&slave->wait_lock);
 	init_waitqueue_head(&slave->wait);
 	mutex_unlock(&spislave_dev_list_lock);
 

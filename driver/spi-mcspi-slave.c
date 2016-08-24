@@ -340,11 +340,14 @@ irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
 	struct spi_slave *slave = dev_id;
 	u32 val;
+	unsigned long flags;
 
 	val = mcspi_slave_read_reg(slave->base, MCSPI_CH0STAT);
 
 	if (val & MCSPI_CHSTAT_EOT) {
-		wake_up_interruptible(&slave->wait);
+		spin_lock_irqsave(&slave->wait_lock, flags);
+		wake_up_all(&slave->wait);
+		spin_unlock_irqrestore(&slave->wait_lock, flags);
 		mcspi_slave_disable(slave);
 	}
 

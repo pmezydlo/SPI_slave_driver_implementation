@@ -40,6 +40,8 @@ struct spi_slave {
 	u32 buf_depth;
 
 	wait_queue_head_t wait;
+	spinlock_t wait_lock;
+
 	struct mutex buf_lock;
 
 	void (*enable)(struct spi_slave *slave);
