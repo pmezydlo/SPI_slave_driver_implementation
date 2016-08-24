@@ -7,7 +7,7 @@
 #include <sys/ioctl.h>
 #include <linux/types.h>
 #include "../driver/spi-slave-dev.h"
-#include <sys/poll.h>
+#include <poll.h>
 
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
@@ -219,6 +219,7 @@ int main(int argc, char *argv[])
 	read_flag = write_flag = 0;
 
 	parse_opts(argc, argv);
+	pollfds.events = POLLIN | POLLRDNORM;
 	pollfds.fd = open(device, O_RDWR);
 
 	if (pollfds.fd < 0) {
