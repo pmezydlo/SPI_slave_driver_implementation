@@ -2,8 +2,8 @@ ARCH := arm
 COMPILER := arm-linux-gnueabihf-
 COMPILER_V := gcc
 PWD := $(shell pwd)
-KERN_V= 4.4.8
-BUILD_V= -ti-r22
+KERN_V= 4.4.23
+BUILD_V= -ti-r51
 SOURCE=linux-stable-rcn-ee
 
 KDIR := $(PWD)/$(SOURCE)-$(KERN_V)$(BUILD_V)

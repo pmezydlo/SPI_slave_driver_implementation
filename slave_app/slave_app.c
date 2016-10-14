@@ -5,20 +5,17 @@
 #include <getopt.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <linux/types.h>
+#include <sys/types.h>
 #include "../driver/spi-slave-dev.h"
-#include <poll.h>
 
 #define TX_ARRAY_SIZE	8
 #define RX_ARRAY_SIZE	64
 
 static const char *device = "/dev/spislave0";
 
-static uint8_t read_flag;
-static uint8_t write_flag;
-
 static uint32_t tx_offset;
 static uint32_t rx_offset;
+
 static uint32_t bits_per_word = 8;
 static uint32_t mode;
 static uint32_t buf_depth = 64;
@@ -182,12 +179,6 @@ static void parse_opts(int argc, char *argv[])
 		case 'd':
 			device = optarg;
 			break;
-		case 'r':
-			read_flag = 1;
-			break;
-		case 'w':
-			write_flag = 1;
-			break;
 		case 'b':
 			bits_per_word = atoi(optarg);
 			break;
@@ -212,17 +203,12 @@ static void parse_opts(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 	int ret = 0;
-	int i;
-	int timeout = 3000000; /*timeout in msec*/
-	struct pollfd pollfds;
-
-	read_flag = write_flag = 0;
+	int fd;
 
 	parse_opts(argc, argv);
-	pollfds.events = POLLIN | POLLRDNORM;
-	pollfds.fd = open(device, O_RDWR);
+	fd = open(device, O_RDWR);
 
-	if (pollfds.fd < 0) {
+	if (fd < 0) {
 		printf("Failed to open the device!\n");
 		return -1;
 	}
@@ -234,51 +220,29 @@ int main(int argc, char *argv[])
 
 	print_setting();
 
-	ret = put_setting(pollfds.fd);
+	ret = put_setting(fd);
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(pollfds.fd, SPISLAVE_SET_TRANSFER);
+	ret = ioctl(fd, SPISLAVE_SET_TRANSFER);
 	if (ret == -1)
 		return -1;
 
-	ret = transfer_8bit(pollfds.fd);
+	ret = transfer_8bit(fd);
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(pollfds.fd, SPISLAVE_ENABLED);
+	ret = ioctl(fd, SPISLAVE_ENABLED);
 	if (ret == -1)
 		return -1;
 
-	while (1) {
-		ret = poll(&pollfds, 1, timeout);
-
-		switch (ret) {
-		case 0:
-			printf("timeout\n");
-			exit(1);
-			break;
-
-		case -1:
-			printf("poll error\n");
-			exit(1);
-			break;
-
-		default:
-			if (pollfds.revents & POLLIN & POLLRDNORM) {
-				ret = read_8bit(pollfds.fd);
-
-				if (ret < 0) {
-					printf("Failed to reads!\n");
-					return -1;
-				}
-				exit(0);
-			}
-			break;
-		}
+	ret = read_8bit(fd);
+	if (ret < 0) {
+		printf("Failed to reads!\n");
+		return -1;
 	}
 
-	ret = ioctl(pollfds.fd, SPISLAVE_CLR_TRANSFER);
+	ret = ioctl(fd, SPISLAVE_CLR_TRANSFER);
 	if (ret == -1)
 		return -1;
 
