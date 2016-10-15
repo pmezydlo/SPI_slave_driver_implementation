@@ -30,12 +30,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-# PRU_CGT environment variable must point to the TI PRU compiler directory. E.g.:
-#(Linux) export PRU_CGT=/home/jason/ti/ccs_v6_1_0/ccsv6/tools/compiler/ti-cgt-pru_2.1.0
-#(Windows) set PRU_CGT=C:/TI/ccs_v6_0_1/ccsv6/tools/compiler/ti-cgt-pru_2.1.0
-
-export PRU_CGT=/usr/share/ti/cgt-pru
+export PRU_CGT=$(PWD)/../../ti-cgt-pru_2.1.2
 
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURRENT_DIR := $(notdir $(patsubst %/,%,$(dir $(MKFILE_PATH))))
@@ -61,23 +56,12 @@ all: $(TARGET)
 
 # Invokes the linker (-z flag) to make the .out file
 $(TARGET): $(OBJECTS) $(LINKER_COMMAND_FILE)
-	@echo ''
-	@echo 'Building target: $@'
-	@echo 'Invoking: PRU Linker'
 	$(PRU_CGT)/bin/clpru $(CFLAGS) -z -i$(PRU_CGT)/lib -i$(PRU_CGT)/include $(LFLAGS) -o $(TARGET) $(OBJECTS) -m$(MAP) $(LINKER_COMMAND_FILE) --library=libc.a
-	@echo 'Finished building target: $@'
-	@echo ''
-	@echo 'Output files can be found in the "$(GEN_DIR)" directory'
 
 # Invokes the compiler on all c files in the directory to create the object files
 $(GEN_DIR)/%.object: %.c
 	@mkdir -p $(GEN_DIR)
-	@echo ''
-	@echo 'Building file: $<'
-	@echo 'Invoking: PRU Compiler'
 	$(PRU_CGT)/bin/clpru --include_path=$(PRU_CGT)/include $(INCLUDE) $(CFLAGS) -fe $@ $<
-
-.PHONY: all clean
 
 # Remove the $(GEN_DIR) directory
 clean:
@@ -85,4 +69,3 @@ clean:
 
 # Includes the dependencies that the compiler creates (-ppd and -ppa flags)
 -include $(OBJECTS:%.object=%.pp)
-

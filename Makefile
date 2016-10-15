@@ -5,6 +5,7 @@ PWD := $(shell pwd)
 KERN_V=4.8.1
 BUILD_V=-bone1
 SOURCE=linux-stable-rcn-ee
+SUBDIRS=firmware/
 
 KDIR := $(PWD)/$(SOURCE)-$(KERN_V)$(BUILD_V)
 
@@ -13,6 +14,8 @@ obj-m+=driver/spi-mcspi-slave.o driver/spi-slave-dev.o driver/spi-slave-core.o d
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER)  modules
 	$(COMPILER)$(COMPILER_V) -o slave_app/slave_app slave_app/slave_app.c
+	@cd $(SUBDIRS) && $(MAKE)
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) clean
+	@cd $(SUBDIRS) && $(MAKE) clean

@@ -13,7 +13,10 @@ before_install:
   - arm-linux-gnueabihf-gcc --version
   
   - sudo apt-get install bc
-
+  - sudo wget -c http://software-dl.ti.com/codegen/esd/cgt_public_sw/PRU/2.1.2/ti_cgt_pru_2.1.2_linux_installer_x86.bin
+  - sudo chmod +x ti_cgt_pru_2.1.2_linux_installer_x86.bin
+  - sudo ./ti_cgt_pru_2.1.2_armlinuxa8hf_busybox_installer.sh
+ 
 before_script:
 
   - export DST_PROJECT=$PWD
@@ -54,4 +57,5 @@ script:
   - sudo dtc -O dtb -o SPI1_slave-00A0.dtbo -b 0 -@ SPI1_slave.dts
   - sudo dtc -O dtb -o PRU0_SPI_slave-00A0.dtbo -b 0 -@ PRU0_SPI_slave.dts
   - sudo dtc -O dtb -o PRU1_SPI_slave-00A0.dtbo -b 0 -@ PRU1_SPI_slave.dts
+
 
