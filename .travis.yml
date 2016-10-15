@@ -15,7 +15,7 @@ before_install:
   - sudo apt-get install bc
   - sudo wget -c http://software-dl.ti.com/codegen/esd/cgt_public_sw/PRU/2.1.2/ti_cgt_pru_2.1.2_linux_installer_x86.bin
   - sudo chmod +x ti_cgt_pru_2.1.2_linux_installer_x86.bin
-  - sudo ./ti_cgt_pru_2.1.2_armlinuxa8hf_busybox_installer.sh
+  - sudo ./ti_cgt_pru_2.1.2_linux_installer_x86.bin
  
 before_script:
 
