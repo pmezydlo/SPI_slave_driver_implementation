@@ -17,10 +17,10 @@ before_install:
   - sudo chmod +x ti_cgt_pru_2.1.2_linux_installer_x86.bin
 
   - >
-    sudo ./ti_cgt_pru_2.1.2_linux_installer_x86.bin << EOF
-    ./
-    y
-    EOF
+sudo ./ti_cgt_pru_2.1.2_linux_installer_x86.bin<<EOF
+./
+y
+EOF
 
 before_script:
 
