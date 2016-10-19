@@ -16,9 +16,9 @@ before_install:
   - sudo wget -c http://software-dl.ti.com/codegen/esd/cgt_public_sw/PRU/2.1.2/ti_cgt_pru_2.1.2_linux_installer_x86.bin
   - sudo chmod +x ti_cgt_pru_2.1.2_linux_installer_x86.bin
 
-  - |
+  - >
     sudo ./ti_cgt_pru_2.1.2_linux_installer_x86.bin << EOF
-
+    ./
     y
     EOF
 
@@ -48,8 +48,9 @@ script:
 
   - cd $DST_PROJECT/
 
-  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/*
-  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/* 
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f slave_app/slave_app.c
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f driver/*
+  - sudo perl $DST_KERNEL/scripts/checkpatch.pl --no-tree -f firmware/pru_spi_slave.c
 
   - make KDIR=$DST_KERNEL ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOCALVERSION=-$SOURCE_VERSION
   - sudo wget -c https://raw.githubusercontent.com/RobertCNelson/tools/master/pkgs/dtc.sh

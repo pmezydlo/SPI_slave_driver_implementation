@@ -19,9 +19,9 @@
         __overlay__ {
             pru0_spi_pins_s0: pru0_spi_pins_s0 {
                 pinctrl-single,pins = <
-                  0x190 0x26  /* pru0_spi_sclk, P9_31 */
-                  0x19C 0x26  /* pru0_spi_cs,   P9_28 */
-                  0x194 0x26  /* pru0_spi_mosi, P9_29 */
+                  0x190 0x05  /* pru0_spi_sclk, P9_31 */
+                  0x19C 0x05  /* pru0_spi_cs,   P9_28 */
+                  0x194 0x05  /* pru0_spi_mosi, P9_29 */
                   0x198 0x06  /* pru0_spi_miso, P9_30 */
                 >;
             };
