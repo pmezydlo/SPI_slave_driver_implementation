@@ -5,18 +5,20 @@
 #define PRU0
 /*#define PRU1*/
 
+#define BIT(x) (1 << x)
+
 #ifdef PRU0
-	#define CLK		0 /*P9_31 IN*/
-	#define CS		3 /*P9_28 IN*/
-	#define MOSI		1 /*P9_29 IN*/
-	#define MISO		2 /*P9_30 OUT*/
+	#define CLK		BIT(0) /*P9_31 IN*/
+	#define CS		BIT(3) /*P9_28 IN*/
+	#define MOSI		BIT(1) /*P9_29 IN*/
+	#define MISO		BIT(2) /*P9_30 OUT*/
 #endif
 
 #ifdef PRU1
-	#define CLK		6 /*P8_39 IN*/
-	#define CS		7 /*P8_40 IN*/
-	#define MOSI		4 /*P8_41 IN*/
-	#define MISO		5 /*P8_42 OUT*/
+	#define CLK		BIT(6) /*P8_39 IN*/
+	#define CS		BIT(7) /*P8_40 IN*/
+	#define MOSI		BIT(4) /*P8_41 IN*/
+	#define MISO		BIT(5) /*P8_42 OUT*/
 #endif
 
 #define PRU_MEM_OFFSET		0x100000
@@ -47,7 +49,12 @@ void main(void)
 	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
 	while (1) {
-		__R30 ^= 0x000F;
-		__delay_cycles(100000000);
+		while (!(__R31 & CS))
+		__R30 |= MISO;
+		__delay_cycles(100);
+		while ((__R31 & CS))
+		__R30 &= ~MISO;
+		__delay_cycles(100);
+
 	}
 }
