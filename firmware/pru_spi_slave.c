@@ -38,8 +38,11 @@
 #define SLAVE_RM		BIT(6)
 #define SLAVE_BITS_PER_WORD	(0x1F << 7)
 
-register uint32_t __R30;
-register uint32_t __R31;
+#define GPIO_IN			__R31
+#define GPIO_OUT		__R30
+
+register uint32_t GPIO_OUT;
+register uint32_t GPIO_IN;
 
 void main(void)
 {
@@ -49,12 +52,13 @@ void main(void)
 	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
 	while (1) {
-		while (!(__R31 & CS))
-		__R30 |= MISO;
-		__delay_cycles(100);
-		while ((__R31 & CS))
-		__R30 &= ~MISO;
+		while (!(GPIO_IN & CS))
+		GPIO_OUT |= MISO;
 		__delay_cycles(100);
 
+
+		while ((GPIO_IN & CS))
+		GPIO_OUT &= ~MISO;
+		__delay_cycles(100);
 	}
 }
