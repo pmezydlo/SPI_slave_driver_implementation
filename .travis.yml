@@ -18,13 +18,13 @@ before_script:
 
   - export DST_PROJECT=$PWD
 
-  - export SOURCE_BRANCH="4.4.8"
-  - export SOURCE_VERSION="ti-r22"
+  - export SOURCE_BRANCH="4.4.9"
+  - export SOURCE_VERSION="ti-r25"
   - export SOURCE_REPO="linux-stable-rcn-ee"
   - export SOURCE_LOCATION="https://github.com/RobertCNelson"
   
   - wget "$SOURCE_LOCATION/$SOURCE_REPO/archive/$SOURCE_BRANCH-$SOURCE_VERSION.tar.gz"
-  - tar -zvxf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
+  - tar -xf $SOURCE_BRANCH-$SOURCE_VERSION.tar.gz
 
   - export DST_KERNEL=$PWD/$SOURCE_REPO-$SOURCE_BRANCH-$SOURCE_VERSION
 

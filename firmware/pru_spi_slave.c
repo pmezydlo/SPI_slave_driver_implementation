@@ -50,18 +50,22 @@ void main(void)
 	uint32_t *status_reg = (uint32_t)(PRU_MEM_OFFSET + SLAVE_STATUS);
 
 	uint32_t *miso_buf;
-	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 	uint8_t c = 0;
+
+	CT_CFG.SYSCFG_bit.STANDBY_INIT = 0;
 
 	while (1) {
 
 		while (!(GPIO_IN & CS)) {/*wait for cs falling edge*/
 
-			while (!(GPIO_IN & CLK)) { /*wait for clk falling edge */
+			/*wait for clk falling edge */
+			while (!(GPIO_IN & CLK)) {
 				*miso_buf = *miso_buf << 1;
-				while (GPIO_IN & CLK) { /*wait for clk rising edge*/
+
+				 /*wait for clk rising edge*/
+				while (GPIO_IN & CLK) {
 					c++;
-					miso_buf+=4;
+					miso_buf += 4;
 				}
 			}
 		}

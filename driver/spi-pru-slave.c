@@ -25,6 +25,11 @@
 
 #include "spi-slave-core.h"
 
+irq_handler_t pruspi_slave_irq(unsigned int irq, void *dev_id)
+{
+	return (irq_handler_t) IRQ_HANDLED;
+}
+
 const struct of_device_id pruspi_slave_of_match[] = {
 	{
 		.compatible = "ti,pru-spi-slave",
@@ -35,13 +40,13 @@ MODULE_DEVICE_TABLE(of, pruspi_slave_of_match);
 
 static int pruspi_slave_probe(struct platform_device *pdev)
 {
-
+	pr_info("pru driver probe");
 	return 0;
 }
 
 static int pruspi_slave_remove(struct platform_device *pdev)
 {
-
+	pr_info("pru driver remove");
 	return 0;
 }
 

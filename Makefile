@@ -2,8 +2,8 @@ ARCH := arm
 COMPILER := arm-linux-gnueabihf-
 COMPILER_V := gcc
 PWD := $(shell pwd)
-KERN_V=4.8.1
-BUILD_V=-bone1
+KERN_V=4.4.9
+BUILD_V=-ti-r25
 SOURCE=linux-stable-rcn-ee
 SUBDIRS=firmware/
 
