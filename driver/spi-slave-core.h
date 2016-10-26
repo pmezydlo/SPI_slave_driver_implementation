@@ -15,8 +15,7 @@
 
 extern struct bus_type spislave_bus_type;
 
-struct spi_slave {
-	struct device dev;
+struct spislave_gadget {
 	void __iomem *base;
 	u32 phys_addr;
 	unsigned int reg_offset;
@@ -28,7 +27,9 @@ struct spi_slave {
 	unsigned int pol;
 
 	unsigned int irq;
+};
 
+struct spislave_message {
 	u32 tx_offset;
 	u32 rx_offset;
 	void  __iomem *tx;
@@ -43,11 +44,17 @@ struct spi_slave {
 	spinlock_t wait_lock;
 
 	struct mutex buf_lock;
+};
 
-	void (*enable)(struct spi_slave *slave);
-	void (*disable)(struct spi_slave *slave);
-	int (*set_transfer)(struct spi_slave *slave);
-	void (*clr_transfer)(struct spi_slave *slave);
+struct spi_slave {
+	struct device dev;
+
+	struct spislave_message *msg;
+	struct spislave_gadget *gadget;
+
+	void (*send_message)(struct spi_slave *slave);
+	void (*prepare_message)(struct spi_slave *slave);
+	void (*clear_message)(struct spi_slave *slave);
 };
 
 struct spislave_device_id {
