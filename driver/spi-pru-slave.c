@@ -23,7 +23,12 @@
 
 #define DRIVER_NAME "spi-pru-slave"
 
-#include "spi-slave-core.h"
+struct pruspi_slave {
+	struct device dev;
+	void __iomem *base;
+	int (*serve_irq)(int, void *);
+};
+
 
 irq_handler_t pruspi_slave_irq(unsigned int irq, void *dev_id)
 {
@@ -40,6 +45,10 @@ MODULE_DEVICE_TABLE(of, pruspi_slave_of_match);
 
 static int pruspi_slave_probe(struct platform_device *pdev)
 {
+	struct device_node *node = pdev->dev.of_node;
+	int ret = 0;
+
+
 	pr_info("pru driver probe");
 	return 0;
 }
