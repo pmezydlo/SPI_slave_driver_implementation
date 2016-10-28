@@ -40,15 +40,16 @@ struct spislave_data {
 	dev_t devt;
 	struct	list_head device_entry;
 	unsigned int users;
-	struct spi_slave *slave;
+	struct spislave *slave;
 	int id;
 };
 
 static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 	struct spislave_data *data;
+	struct spislave_message *msg;
 	ssize_t status;
 	unsigned long missing;
 	DECLARE_WAITQUEUE(wait, current);
@@ -78,19 +79,19 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	remove_wait_queue(&slave->wait, &wait);
 	spin_unlock_irqrestore(&slave->wait_lock, flags);
 
-	mutex_lock(&slave->buf_lock);
+	mutex_lock(&msg->buf_lock);
 
 	if (count > slave->buf_depth)
 		return -EMSGSIZE;
 
 	status = count;
-	missing = copy_to_user(buf, slave->rx, slave->rx_offset);
+	missing = copy_to_user(buf, msg->rx, msg->rx_offset);
 	if (missing == status)
 		status = -EFAULT;
 	else
 		status = status - missing;
 
-	mutex_unlock(&slave->buf_lock);
+	mutex_unlock(&msg->buf_lock);
 
 	return status;
 }
@@ -99,34 +100,37 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
 	ssize_t status = 0;
-	struct spi_slave *slave;
+	struct spislave *slave;
 	unsigned long missing;
 	struct spislave_data *data;
+	struct spislave_msg *msg;
 
 	data = filp->private_data;
 	slave = data->slave;
-	mutex_lock(&slave->buf_lock);
+	msg = slave->msg;
 
-	if (count > slave->buf_depth)
+	mutex_lock(&msg->buf_lock);
+
+	if (count > msg->buf_depth)
 		return -EMSGSIZE;
 
-	memset(slave->tx, 0, slave->buf_depth);
+	memset(msg->tx, 0, msg->buf_depth);
 
-	missing = copy_from_user(slave->tx, buf, count);
+	missing = copy_from_user(msg->tx, buf, count);
 
 	if (missing == 0)
 		status = count;
 	else
 		status = -EFAULT;
 
-	mutex_unlock(&slave->buf_lock);
+	mutex_unlock(&msg->buf_lock);
 
 	return status;
 }
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 	struct spislave_data *data;
 
 	mutex_lock(&spislave_dev_list_lock);
@@ -136,7 +140,6 @@ static int spislave_release(struct inode *inode, struct file *filp)
 
 	data->users--;
 	mutex_unlock(&spislave_dev_list_lock);
-	slave->clr_transfer(slave);
 
 	return 0;
 }
@@ -144,7 +147,8 @@ static int spislave_release(struct inode *inode, struct file *filp)
 static int spislave_open(struct inode *inode, struct file *filp)
 {
 	struct spislave_data *data;
-	struct spi_slave *slave;
+	struct spislave *slave;
+	struct spislave_message *msg;
 	int ret = -ENXIO;
 
 	mutex_lock(&spislave_dev_list_lock);
@@ -171,6 +175,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	spin_lock_init(&slave->wait_lock);
 	init_waitqueue_head(&slave->wait);
 	mutex_unlock(&spislave_dev_list_lock);
+	mutex_init(&msg->buf_lock);
 
 	return 0;
 }
@@ -178,91 +183,80 @@ static int spislave_open(struct inode *inode, struct file *filp)
 static long spislave_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 	struct spislave_data *data;
+	struct spislave_messgae *msg;
 	int ret;
 
 	data = filp->private_data;
 	slave = data->slave;
+	msg = slave->msg;
 
-	mutex_lock(&slave->buf_lock);
+	mutex_lock(&msg->buf_lock);
 
 	switch (cmd) {
 	case SPISLAVE_RD_TX_OFFSET:
-		ret = __put_user(slave->tx_offset, (__u32 __user *)arg);
+		ret = __put_user(msg->tx_offset, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_RX_OFFSET:
-		ret = __put_user(slave->rx_offset, (__u32 __user *)arg);
+		ret = __put_user(msg->rx_offset, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BITS_PER_WORD:
-		ret = __put_user(slave->bits_per_word, (__u32 __user *)arg);
+		ret = __put_user(msg->bits_per_word, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BYTES_PER_LOAD:
-		ret = __put_user(slave->bytes_per_load, (__u32 __user *)arg);
+		ret = __put_user(msg->bytes_per_load, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_MODE:
-		ret = __put_user(slave->mode, (__u32 __user *)arg);
+		ret = __put_user(msg->mode, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BUF_DEPTH:
-		ret = __put_user(slave->buf_depth, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_ENABLED:
-		slave->enable(slave);
-		break;
-
-	case SPISLAVE_DISABLED:
-		slave->disable(slave);
-		break;
-
-	case SPISLAVE_SET_TRANSFER:
-		slave->set_transfer(slave);
-		break;
-
-	case SPISLAVE_CLR_TRANSFER:
-		slave->clr_transfer(slave);
+		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
-		ret = __get_user(slave->bits_per_word, (__u32 __user *)arg);
+		ret = __get_user(msg->bits_per_word, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_MODE:
-		ret = __get_user(slave->mode, (__u32 __user *)arg);
+		ret = __get_user(msg->mode, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_BUF_DEPTH:
-		ret = __get_user(slave->buf_depth, (__u32 __user *)arg);
+		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_BYTES_PER_LOAD:
-		ret = __get_user(slave->bytes_per_load, (__u32 __user *)arg);
+		ret = __get_user(msg->bytes_per_load, (__u32 __user *)arg);
 		break;
 
 	default:
 
 		break;
 	}
-	mutex_unlock(&slave->buf_lock);
+	mutex_unlock(&slave->slave_lock);
 	return 0;
 }
 
 static unsigned int spislave_event_poll(struct file *filp,
 					struct poll_table_struct *wait)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 	struct spislave_data *data;
+	struct spislave_message *msg;
 
 	data = filp->private_data;
 	slave = data->slave;
+	msg = slave->msg;
 
+	/*new way spi slave msg*/
 	poll_wait(filp, &slave->wait, wait);
-	if (slave->rx_offset != 0)
+	if (msg->rx_offset != 0)
 		return POLLIN | POLLRDNORM;
 
 	return 0;
@@ -282,7 +276,7 @@ static int spislave_probe(struct spislave_device *spi)
 {
 	int ret = 0;
 	struct spislave_data *data;
-	struct spi_slave *slave;
+	struct spislave *slave;
 	struct device *dev;
 	struct device_node *node;
 
@@ -299,7 +293,6 @@ static int spislave_probe(struct spislave_device *spi)
 		goto err_out;
 	}
 
-	mutex_init(&slave->buf_lock);
 	INIT_LIST_HEAD(&data->device_entry);
 
 	mutex_lock(&spislave_dev_list_lock);

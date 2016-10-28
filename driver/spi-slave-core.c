@@ -87,7 +87,7 @@ static int __unregister(struct device *dev, void *null)
 	return 0;
 }
 
-void spislave_unregister_slave(struct spi_slave *slave)
+void spislave_unregister_slave(struct spislave *slave)
 {
 	int				dummy;
 
@@ -98,14 +98,14 @@ EXPORT_SYMBOL_GPL(spislave_unregister_slave);
 
 static void devm_spislave_unregister_slave(struct device *dev, void *res)
 {
-	spislave_unregister_slave(*(struct spi_slave **)res);
+	spislave_unregister_slave(*(struct spislave **)res);
 }
 EXPORT_SYMBOL_GPL(devm_spislave_unregister_slave);
 
 static void spislave_dev_release(struct device *dev)
 {
 	struct spislave_device *slave_dev = to_spislave_dev(dev);
-	struct spi_slave *slave;
+	struct spislave *slave;
 
 	slave = slave_dev->slave;
 
@@ -115,9 +115,9 @@ static void spislave_dev_release(struct device *dev)
 
 static void spislave_release(struct device *dev)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 
-	slave = container_of(dev, struct spi_slave, dev);
+	slave = container_of(dev, struct spislave, dev);
 	kfree(slave);
 }
 
@@ -127,9 +127,9 @@ static struct class spislave_class = {
 	.dev_release = spislave_release,
 };
 
-struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned int size)
+struct spislave *spislave_alloc_slave(struct device *dev, unsigned int size)
 {
-	struct spi_slave *slave;
+	struct spislave *slave;
 
 	slave = kzalloc(size + sizeof(*slave), GFP_KERNEL);
 	if (!slave)
@@ -144,7 +144,7 @@ struct spi_slave *spislave_alloc_slave(struct device *dev, unsigned int size)
 }
 EXPORT_SYMBOL_GPL(spislave_alloc_slave);
 
-static struct spislave_device *spislave_register_device(struct spi_slave *slave,
+static struct spislave_device *spislave_register_device(struct spislave *slave,
 							struct device_node *nc)
 {
 	struct spislave_device *slave_dev;
@@ -183,7 +183,7 @@ static struct spislave_device *spislave_register_device(struct spi_slave *slave,
 	return slave_dev;
 }
 
-int spislave_register_devices(struct spi_slave *slave)
+int spislave_register_devices(struct spislave *slave)
 {
 	struct spislave_device *slave_dev;
 	struct device_node *nc;
@@ -204,7 +204,7 @@ int spislave_register_devices(struct spi_slave *slave)
 }
 
 
-int spislave_register_slave(struct spi_slave *slave, struct device *dev)
+int spislave_register_slave(struct spislave *slave, struct device *dev)
 {
 	int ret = 0;
 	struct device_node *node;
@@ -230,10 +230,10 @@ int spislave_register_slave(struct spi_slave *slave, struct device *dev)
 }
 
 int devm_spislave_register_slave(struct device *dev,
-				  struct spi_slave *slave)
+				 struct spislave *slave)
 {
 	int ret = 0;
-	struct spi_slave **ptr;
+	struct spislave **ptr;
 
 	ptr = devres_alloc(devm_spislave_unregister_slave, sizeof(*ptr),
 			   GFP_KERNEL);

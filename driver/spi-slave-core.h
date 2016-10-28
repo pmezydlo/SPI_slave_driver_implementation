@@ -15,7 +15,7 @@
 
 extern struct bus_type spislave_bus_type;
 
-struct spislave_gadget {
+/*
 	void __iomem *base;
 	u32 phys_addr;
 	unsigned int reg_offset;
@@ -25,9 +25,8 @@ struct spislave_gadget {
 	u32 cs_polarity;
 	unsigned int pha;
 	unsigned int pol;
-
 	unsigned int irq;
-};
+*/
 
 struct spislave_message {
 	u32 tx_offset;
@@ -39,22 +38,20 @@ struct spislave_message {
 	u32 bytes_per_load;
 	u32 bits_per_word;
 	u32 buf_depth;
-
-	wait_queue_head_t wait;
-	spinlock_t wait_lock;
-
 	struct mutex buf_lock;
 };
 
-struct spi_slave {
+struct spislave {
 	struct device dev;
-
 	struct spislave_message *msg;
-	struct spislave_gadget *gadget;
 
-	void (*send_message)(struct spi_slave *slave);
-	void (*prepare_message)(struct spi_slave *slave);
-	void (*clear_message)(struct spi_slave *slave);
+	wait_queue_head_t wait;
+	spinlock_t wait_lock;
+	struct mutex slave_lock;
+
+	void (*send_message)(struct spislave *slave);
+	void (*prepare_message)(struct spislave *slave);
+	void (*clear_message)(struct spislave *slave);
 };
 
 struct spislave_device_id {
@@ -64,7 +61,7 @@ struct spislave_device_id {
 
 struct spislave_device {
 	struct device dev;
-	struct spi_slave *slave;
+	struct spislave *slave;
 	char modalias[SPISLAVE_NAME_SIZE];
 };
 
@@ -78,7 +75,7 @@ struct spislave_driver {
 extern int spislave_register_driver(struct spislave_driver *sdrv);
 extern void spislave_unregister_driver(struct spislave_driver *sdrv);
 extern int devm_spislave_register_slave(struct device *dev,
-					struct spi_slave *slave);
+					struct spislave *slave);
 extern void spislave_unregister_device(struct spislave_device *dev);
 
 static inline void *spislave_get_drv_data(struct spislave_device *sdev)
@@ -92,18 +89,18 @@ static inline void spislave_set_drv_data(struct spislave_device *sdev,
 	dev_set_drvdata(&sdev->dev, data);
 }
 
-static inline void *spislave_get_slave_data(struct spi_slave *slave)
+static inline void *spislave_get_slave_data(struct spislave *slave)
 {
 	return dev_get_drvdata(&slave->dev);
 }
 
-static inline void spislave_set_slave_data(struct spi_slave *slave,
+static inline void spislave_set_slave_data(struct spislave *slave,
 					    void *data)
 {
 	dev_set_drvdata(&slave->dev, data);
 }
 
-extern struct spi_slave *spislave_alloc_slave(struct device *dev,
+extern struct spislave *spislave_alloc_slave(struct device *dev,
 					      unsigned int size);
 static inline struct spislave_device *to_spislave_dev(struct device *dev)
 {

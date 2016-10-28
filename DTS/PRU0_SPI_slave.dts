@@ -21,15 +21,18 @@
             #size-cells = <1>;
 
             pru0_spi_slave: pru0_spi_slave@4a334000 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
                 compatible = "ti,pru-spi-slave";
 
-		reg = <0x4a300000 0x080000>
+		reg = <0x4a300000 0x080000>;
 		dram = <0x00000 0x02000 0x00000 0x10000>;
 		status = "okay";
 		interrupt-parent = <&intc>;
 		interrupts = <20 21 22 23 24 25 26 27>;
 		events = <2 3 4 5 6 7 8 9>;
-		pintc = <0x20000>
+		pintc = <0x20000>;
 
                 spislave0@0 {
                     reg = <0>;
