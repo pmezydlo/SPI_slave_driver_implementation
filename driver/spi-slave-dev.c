@@ -175,7 +175,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	spin_lock_init(&slave->wait_lock);
 	init_waitqueue_head(&slave->wait);
 	mutex_unlock(&spislave_dev_list_lock);
-	mutex_init(&msg->buf_lock);
+	/*mutex_init(&msg->buf_lock);*/
 
 	return 0;
 }
@@ -192,31 +192,35 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	slave = data->slave;
 	msg = slave->msg;
 
-	mutex_lock(&msg->buf_lock);
+	mutex_lock(&msg->msg_lock);
 
 	switch (cmd) {
 	case SPISLAVE_RD_TX_OFFSET:
-		ret = __put_user(msg->tx_offset, (__u32 __user *)arg);
+		ret = __put_user(msg->tx_actual_length, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_RX_OFFSET:
-		ret = __put_user(msg->rx_offset, (__u32 __user *)arg);
+		ret = __put_user(msg->rx_actual_length, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BITS_PER_WORD:
 		ret = __put_user(msg->bits_per_word, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_BYTES_PER_LOAD:
-		ret = __put_user(msg->bytes_per_load, (__u32 __user *)arg);
+	case SPISLAVE_RD_WORD_AFTER_DATA:
+		ret = __put_user(msg->word_after_data, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_MODE:
-		ret = __put_user(msg->mode, (__u32 __user *)arg);
+		ret = __put_user(msg->mode, (__u8 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BUF_DEPTH:
 		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_SUB_MODE:
+		ret = __put_user(msg->sub_mode, (__u8 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
@@ -224,22 +228,25 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SPISLAVE_WR_MODE:
-		ret = __get_user(msg->mode, (__u32 __user *)arg);
+		ret = __get_user(msg->mode, (__u8 __user *)arg);
 		break;
+
+	case SPISLAVE_WR_SUB_MODE:
+		ret = __get_user(msg->sub_mode, (__u8 __user *)arg);
 
 	case SPISLAVE_WR_BUF_DEPTH:
 		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_WR_BYTES_PER_LOAD:
-		ret = __get_user(msg->bytes_per_load, (__u32 __user *)arg);
+	case SPISLAVE_WR_WORD_AFTER_DATA:
+		ret = __get_user(msg->word_after_data, (__u32 __user *)arg);
 		break;
 
 	default:
 
 		break;
 	}
-	mutex_unlock(&slave->slave_lock);
+	mutex_unlock(&slave->msg_lock);
 	return 0;
 }
 
@@ -255,8 +262,8 @@ static unsigned int spislave_event_poll(struct file *filp,
 	msg = slave->msg;
 
 	/*new way spi slave msg*/
-	poll_wait(filp, &slave->wait, wait);
-	if (msg->rx_offset != 0)
+	poll_wait(filp, &msg->wait, wait);
+	if (msg->rx_ != 0)
 		return POLLIN | POLLRDNORM;
 
 	return 0;

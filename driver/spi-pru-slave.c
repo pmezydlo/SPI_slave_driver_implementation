@@ -45,12 +45,13 @@ MODULE_DEVICE_TABLE(of, pruspi_slave_of_match);
 
 static int pruspi_slave_probe(struct platform_device *pdev)
 {
-	struct device_node *node = pdev->dev.of_node;
+	struct device_node *node;
 	int ret = 0;
 
+	node = pdev->dev.of_node;
 
 	pr_info("pru driver probe");
-	return 0;
+	return ret;
 }
 
 static int pruspi_slave_remove(struct platform_device *pdev)

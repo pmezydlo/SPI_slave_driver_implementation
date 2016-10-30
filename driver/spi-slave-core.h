@@ -15,43 +15,59 @@
 
 extern struct bus_type spislave_bus_type;
 
-/*
-	void __iomem *base;
-	u32 phys_addr;
-	unsigned int reg_offset;
-
-	unsigned int pin_dir;
-	u32 cs_sensitive;
-	u32 cs_polarity;
-	unsigned int pha;
-	unsigned int pol;
-	unsigned int irq;
-*/
-
 struct spislave_message {
-	u32 tx_offset;
-	u32 rx_offset;
+/*pointer for transmit data buffer*/
 	void  __iomem *tx;
-	void  __iomem *rx;
+/*the length of transmit data buffer in bytes*/
+	u32 tx_actual_length;
 
-	u32 mode;
-	u32 bytes_per_load;
+/*pointer for receive data buffer*/
+	void  __iomem *rx;
+/*the length of receive data buffer in bytes*/
+	u32 rx_actual_length;
+
+/*selection of master and slave mode*/
+	u8 mode;
+#define SPISLAVE_MASTER_MODE 0
+#define SPISLAVE_SLAVE_MODE 1
+
+/* support for the implementation of transfer which only
+ * transmit and receive
+ */
+	u8 sub_mode;
+#define SPISLAVE_TRANSMIT_RECEIVE_MODE 0
+#define SPISlAVE_RECEIVE_MODE 1
+#define SPISLAVE_TRANSMIT_MODE 2
+
+/* only in slave mode
+ * |C|C|C|C| |C|C|C|C| - CLK
+ * |A|A|A|A|           - DATA FROM MASTER
+ * <----->   |D|D|D|D| - DATA FROM SLAVE
+ * the number of words after which slave
+ * starts to send data
+ */
+	u32 word_after_data;
+
+/*the number of bits per word*/
 	u32 bits_per_word;
+
+/*the number of bytes per one transfer*/
 	u32 buf_depth;
-	struct mutex buf_lock;
+
+	wait_queue_head_t wait;
+	spinlock_t wait_lock;
+
+	struct mutex msg_lock;
 };
 
 struct spislave {
 	struct device dev;
 	struct spislave_message *msg;
 
-	wait_queue_head_t wait;
-	spinlock_t wait_lock;
 	struct mutex slave_lock;
 
-	void (*send_message)(struct spislave *slave);
-	void (*prepare_message)(struct spislave *slave);
-	void (*clear_message)(struct spislave *slave);
+	void (*transfer)(struct spislave *slave);
+	void (*cleanup)(struct spislave *slave);
 };
 
 struct spislave_device_id {

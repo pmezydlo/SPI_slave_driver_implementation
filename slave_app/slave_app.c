@@ -9,17 +9,19 @@
 #include "../driver/spi-slave-dev.h"
 
 #define TX_ARRAY_SIZE	8
-#define RX_ARRAY_SIZE	64
+#define RX_ARRAY_SIZE	8
 
 static const char *device = "/dev/spislave0";
 
-static uint32_t tx_offset;
-static uint32_t rx_offset;
+static uint32_t tx_actual_length;
+static uint32_t rx_actual_length;
 
 static uint32_t bits_per_word = 8;
-static uint32_t mode;
-static uint32_t buf_depth = 64;
+static uint8_t mode;
+static uint8_t sub_mode;
+static uint32_t buf_depth = 8;
 static uint32_t bytes_per_load = 4;
+static uint32_t word_after_data = 1;
 
 static int transfer_8bit(int fd)
 {
@@ -55,7 +57,7 @@ static int read_8bit(int fd)
 
 	printf("Receive:\n");
 
-	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &length);
+	ret = ioctl(fd, SPISLAVE_RD_RX_ACTUAL_LENGTH, &length);
 	if (ret == -1) {
 		printf("failed to read the length?\n");
 		return -1;
@@ -92,7 +94,11 @@ static int put_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_WR_BYTES_PER_LOAD, &bytes_per_load);
+	ret = ioctl(fd, SPISLAVE_WR_WORD_AFTER_DATA, &word_after_data);
+	if (ret == -1)
+		return -1;
+
+	ret = ioctl(fd, SPISLAVE_WR_SUB_MODE, &sub_mode);
 	if (ret == -1)
 		return -1;
 
@@ -107,11 +113,11 @@ static int get_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_RX_OFFSET, &rx_offset);
+	ret = ioctl(fd, SPISLAVE_RD_RX_ACTUAL_LENGTH, &rx_actual_length);
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_TX_OFFSET, &tx_offset);
+	ret = ioctl(fd, SPISLAVE_RD_TX_ACTUAL_LENGTH, &tx_actual_length);
 	if (ret == -1)
 		return -1;
 
@@ -123,7 +129,7 @@ static int get_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_BYTES_PER_LOAD, &bytes_per_load);
+	ret = ioctl(fd, SPISLAVE_RD_WORD_AFTER_DATA, &word_after_data);
 	if (ret == -1)
 		return -1;
 
@@ -132,26 +138,23 @@ static int get_setting(int fd)
 
 static void print_setting(void)
 {
-	printf("TX offset:%d, RX offset:%d, Bits per word:%d\n",
-	       tx_offset, rx_offset, bits_per_word);
-	printf("BUF depth:%d, Mode:%d, Bytes per load:%d\n",
-	       buf_depth, mode, bytes_per_load);
+	printf("TX length:%d, RX length:%d, Bits per word:%d\n",
+	       tx_actual_length, rx_actual_length, bits_per_word);
+	printf("BUF depth:%d, Mode:%d, Word after data:%d sub_mode:%d\n",
+	       buf_depth, mode, word_after_data, sub_mode);
 }
 
 static void print_usage(const char *prog)
 {
-	printf("Usage: %s [-dbmlpe?]\n", prog);
+	printf("Usage: %s [-dbs?ewm]\n", prog);
 	puts("  -d --device	device to use (default /dev/spislave1\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
-	     "  -o  --mode	slave sub-mode 0-trm, 1-rm, 0-tm\n"
-	     "  -?  --help	print halp\n"
+	     "  -s  --sb	slave sub-mode 0-trm, 1-rm, 0-tm\n"
+	     "  -?  --help	print help\n"
 	     "  -e  --bd	slave buffer depth\n"
-	     "  -p  --bpl	how many bytes after buf is reload\n"
-	     "\n"
-	     "\n"
-	     "	./slave_app --r --w\n"
-	     "	./slave_app --r -d 1\n"
-	     "	./slave_app --w -d 2\n"
+	     "  -w  --w		the number of word after which slave starts\n"
+	     "                  to send data\n"
+	     "  -m  --m         slave mode 0-master, 1-slave\n"
 	     "\n");
 	exit(1);
 }
@@ -162,15 +165,16 @@ static void parse_opts(int argc, char *argv[])
 		static const struct option lopts[] = {
 			{ "device", required_argument,	0, 'd' },
 			{ "bpw",    required_argument,	0, 'b' },
-			{ "mode",   required_argument,	0, '0' },
-			{ "bpl",    required_argument,  0, 'p' },
-			{ "bd",	    required_argument,  0, 'e' },
+			{ "sb",     required_argument,	0, 's' },
+			{ "w",	    required_argument,  0, 'w' },
+			{ "mode",   required_argument,  0, 'm' },
+			{ "bd",     required_argument,  0, 'e' },
 			{ "help",   no_argument,	0, '?' },
 			{ NULL,	    0,			0,  0  },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:b:o:p:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:b:s:w:m:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -182,10 +186,13 @@ static void parse_opts(int argc, char *argv[])
 		case 'b':
 			bits_per_word = atoi(optarg);
 			break;
-		case 'p':
-			bytes_per_load = atoi(optarg);
+		case 's':
+			sub_mode = atoi(optarg);
 			break;
-		case 'o':
+		case 'w':
+			word_after_data = atoi(optarg);
+			break;
+		case 'm':
 			mode = atoi(optarg);
 			break;
 		case 'e':
@@ -224,17 +231,11 @@ int main(int argc, char *argv[])
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_SET_TRANSFER);
-	if (ret == -1)
-		return -1;
-
 	ret = transfer_8bit(fd);
-	if (ret == -1)
+	if (ret == -1) {
+		printf("Failed to writes");
 		return -1;
-
-	ret = ioctl(fd, SPISLAVE_ENABLED);
-	if (ret == -1)
-		return -1;
+	}
 
 	ret = read_8bit(fd);
 	if (ret < 0) {
@@ -242,9 +243,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	ret = ioctl(fd, SPISLAVE_CLR_TRANSFER);
-	if (ret == -1)
-		return -1;
+	close(fd);
 
 	return ret;
 }
