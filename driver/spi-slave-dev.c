@@ -58,6 +58,7 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	data = filp->private_data;
 	slave = data->slave;
 
+
 	spin_lock_irqsave(&slave->wait_lock, flags);
 
 	if (filp->f_flags & O_NONBLOCK) {
@@ -137,6 +138,7 @@ static int spislave_release(struct inode *inode, struct file *filp)
 
 	data = filp->private_data;
 	slave = data->slave;
+	spislave_msg_remove(slave);
 
 	data->users--;
 	mutex_unlock(&spislave_dev_list_lock);
@@ -172,10 +174,12 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	filp->private_data = data;
 	nonseekable_open(inode, filp);
 	slave = data->slave;
-	spin_lock_init(&slave->wait_lock);
-	init_waitqueue_head(&slave->wait);
+
+	msg = spislave_msg_alloc(slave);
+	if (!msg)
+		ret = -ENOMEM;
+
 	mutex_unlock(&spislave_dev_list_lock);
-	/*mutex_init(&msg->buf_lock);*/
 
 	return 0;
 }
@@ -186,7 +190,7 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	struct spislave *slave;
 	struct spislave_data *data;
 	struct spislave_messgae *msg;
-	int ret;
+	int ret = 0;
 
 	data = filp->private_data;
 	slave = data->slave;
@@ -195,11 +199,11 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	mutex_lock(&msg->msg_lock);
 
 	switch (cmd) {
-	case SPISLAVE_RD_TX_OFFSET:
+	case SPISLAVE_RD_TX_ACTUAL_LENGTH:
 		ret = __put_user(msg->tx_actual_length, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_RX_OFFSET:
+	case SPISLAVE_RD_RX_ACTUAL_LENGTH:
 		ret = __put_user(msg->rx_actual_length, (__u32 __user *)arg);
 		break;
 
@@ -246,8 +250,9 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 
 		break;
 	}
+
 	mutex_unlock(&slave->msg_lock);
-	return 0;
+	return ret;
 }
 
 static unsigned int spislave_event_poll(struct file *filp,
@@ -261,9 +266,8 @@ static unsigned int spislave_event_poll(struct file *filp,
 	slave = data->slave;
 	msg = slave->msg;
 
-	/*new way spi slave msg*/
 	poll_wait(filp, &msg->wait, wait);
-	if (msg->rx_ != 0)
+	if (msg->rx_actual_length != 0)
 		return POLLIN | POLLRDNORM;
 
 	return 0;

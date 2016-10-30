@@ -64,8 +64,6 @@ struct spislave {
 	struct device dev;
 	struct spislave_message *msg;
 
-	struct mutex slave_lock;
-
 	void (*transfer)(struct spislave *slave);
 	void (*cleanup)(struct spislave *slave);
 };

@@ -20,6 +20,38 @@
 #include "spi-slave-core.h"
 #define DRIVER_NAME "spislavecore"
 
+
+/*============================================================================*/
+struct spislave_message *spislave_msg_alloc(struct spislave *slave)
+{
+	struct spislave_message *msg;
+
+	msg = slave->msg;
+
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
+		return NULL;
+
+	mutex_init(&msg->msg_lock);
+	spin_lock_init(&msg->wait_lock);
+	init_waitqueue_head(&msg->wait);
+	slave->msg = msg;
+
+	return msg;
+}
+EXPORT_SYMBOL_GPL(spislave_msg_alloc);
+
+void spislave_msg_remove(struct spislave *slave)
+{
+	struct spislave_message *msg;
+
+	msg = slave->msg;
+
+	if (msg)
+		kfree(msg);
+}
+
+/*============================================================================*/
 static int spislave_drv_probe(struct device *dev)
 {
 	int ret = 0;
