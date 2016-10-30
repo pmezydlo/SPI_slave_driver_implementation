@@ -46,9 +46,7 @@ void spislave_msg_remove(struct spislave *slave)
 	struct spislave_message *msg;
 
 	msg = slave->msg;
-
-	if (msg)
-		kfree(msg);
+	kfree(msg);
 }
 
 /*============================================================================*/
