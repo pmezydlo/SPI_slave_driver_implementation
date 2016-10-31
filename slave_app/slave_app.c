@@ -18,7 +18,6 @@ static uint32_t rx_actual_length;
 
 static uint32_t bits_per_word = 8;
 static uint8_t mode;
-static uint8_t sub_mode;
 static uint32_t buf_depth = 8;
 static uint32_t bytes_per_load = 4;
 static uint32_t word_after_data = 1;
@@ -98,10 +97,6 @@ static int put_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_WR_SUB_MODE, &sub_mode);
-	if (ret == -1)
-		return -1;
-
 	return ret;
 }
 
@@ -140,8 +135,8 @@ static void print_setting(void)
 {
 	printf("TX length:%d, RX length:%d, Bits per word:%d\n",
 	       tx_actual_length, rx_actual_length, bits_per_word);
-	printf("BUF depth:%d, Mode:%d, Word after data:%d sub_mode:%d\n",
-	       buf_depth, mode, word_after_data, sub_mode);
+	printf("BUF depth:%d, Mode:%d, Word after data:%d\n",
+	       buf_depth, mode, word_after_data);
 }
 
 static void print_usage(const char *prog)
@@ -149,7 +144,6 @@ static void print_usage(const char *prog)
 	printf("Usage: %s [-dbs?ewm]\n", prog);
 	puts("  -d --device	device to use (default /dev/spislave1\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
-	     "  -s  --sb	slave sub-mode 0-trm, 1-rm, 0-tm\n"
 	     "  -?  --help	print help\n"
 	     "  -e  --bd	slave buffer depth\n"
 	     "  -w  --w		the number of word after which slave starts\n"
@@ -165,7 +159,6 @@ static void parse_opts(int argc, char *argv[])
 		static const struct option lopts[] = {
 			{ "device", required_argument,	0, 'd' },
 			{ "bpw",    required_argument,	0, 'b' },
-			{ "sb",     required_argument,	0, 's' },
 			{ "w",	    required_argument,  0, 'w' },
 			{ "mode",   required_argument,  0, 'm' },
 			{ "bd",     required_argument,  0, 'e' },
@@ -174,7 +167,7 @@ static void parse_opts(int argc, char *argv[])
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:b:s:w:m:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:b:w:m:e:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -185,9 +178,6 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'b':
 			bits_per_word = atoi(optarg);
-			break;
-		case 's':
-			sub_mode = atoi(optarg);
 			break;
 		case 'w':
 			word_after_data = atoi(optarg);

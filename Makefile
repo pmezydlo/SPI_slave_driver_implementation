@@ -9,7 +9,7 @@ SUBDIRS=firmware/
 
 KDIR := $(PWD)/$(SOURCE)-$(KERN_V)$(BUILD_V)
 
-obj-m+= driver/spi-slave-core.o driver/spi-pru-slave.o
+obj-m+= driver/spi-slave-core.o driver/spi-pru-slave.o driver/spi-slave-dev.o
 
 default:
 	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(COMPILER) modules

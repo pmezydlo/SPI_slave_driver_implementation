@@ -20,7 +20,6 @@
 #include "spi-slave-core.h"
 #define DRIVER_NAME "spislavecore"
 
-
 /*============================================================================*/
 struct spislave_message *spislave_msg_alloc(struct spislave *slave)
 {
@@ -45,9 +44,24 @@ void spislave_msg_remove(struct spislave *slave)
 {
 	struct spislave_message *msg;
 
+	slave->clear_msg(slave);
 	msg = slave->msg;
 	kfree(msg);
 }
+EXPORT_SYMBOL_GPL(spislave_msg_remove);
+
+int spislave_transfer_msg(struct spislave *slave)
+{
+	int ret = 0;
+	struct spislave_message *msg;
+
+	msg = slave->msg;
+
+	ret = slave->transfer_msg(slave);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(spislave_transfer_msg);
 
 /*============================================================================*/
 static int spislave_drv_probe(struct device *dev)
@@ -77,12 +91,12 @@ static int spislave_drv_remove(struct device *dev)
 
 	sdrv = to_spislave_drv(dev->driver);
 
-	if (sdrv == NULL)
+	if (!sdrv)
 		return -ENODEV;
 
 	sdev = to_spislave_dev(dev);
 
-	if (sdev == NULL)
+	if (!sdev)
 		return -ENODEV;
 
 	ret = sdrv->remove(sdev);
@@ -184,7 +198,7 @@ static struct spislave_device *spislave_register_device(struct spislave *slave,
 
 	slave_dev = kzalloc(sizeof(*slave_dev), GFP_KERNEL);
 
-	if (slave_dev == NULL) {
+	if (!slave_dev) {
 		put_device(&slave->dev);
 		return NULL;
 	}

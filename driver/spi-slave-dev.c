@@ -47,52 +47,67 @@ struct spislave_data {
 static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 			     loff_t *f_pos)
 {
-	struct spislave *slave;
-	struct spislave_data *data;
-	struct spislave_message *msg;
+	struct spislave_data *data = filp->private_data;
+	struct spislave *slave = data->slave;
+	struct spislave_message *msg = slave->msg;
 	ssize_t status;
 	unsigned long missing;
 	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
+	int ret = 0;
 
-	data = filp->private_data;
-	slave = data->slave;
+	if (msg->mode == SPISLAVE_SLAVE_MODE) {
+		ret = spislave_transfer_msg(slave);
+		if (ret < 0)
+			status = -EFAULT;
+	}
 
-
-	spin_lock_irqsave(&slave->wait_lock, flags);
+	spin_lock_irqsave(&msg->wait_lock, flags);
 
 	if (filp->f_flags & O_NONBLOCK) {
-		spin_unlock_irqrestore(&slave->wait_lock, flags);
+		spin_unlock_irqrestore(&msg->wait_lock, flags);
 		return -EAGAIN;
 	}
 
-	add_wait_queue(&slave->wait, &wait);
+	add_wait_queue(&msg->wait, &wait);
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (signal_pending(current))
 			break;
 
-		spin_unlock_irqrestore(&slave->wait_lock, flags);
+		spin_unlock_irqrestore(&msg->wait_lock, flags);
 		schedule();
-		spin_lock_irqsave(&slave->wait_lock, flags);
+		spin_lock_irqsave(&msg->wait_lock, flags);
 	}
 	set_current_state(TASK_RUNNING);
-	remove_wait_queue(&slave->wait, &wait);
-	spin_unlock_irqrestore(&slave->wait_lock, flags);
+	remove_wait_queue(&msg->wait, &wait);
+	spin_unlock_irqrestore(&msg->wait_lock, flags);
 
-	mutex_lock(&msg->buf_lock);
+	mutex_lock(&msg->msg_lock);
 
-	if (count > slave->buf_depth)
+	if (count > msg->buf_depth)
 		return -EMSGSIZE;
 
+	if (!msg->tx) {
+		msg->tx = kzalloc(msg->buf_depth, GFP_KERNEL);
+		if (!msg->tx)
+			return -ENOMEM;
+	}
+
+	if (!msg->rx) {
+		msg->rx = kzalloc(msg->buf_depth, GFP_KERNEL);
+		if (!msg->rx)
+			return -ENOMEM;
+	}
+
 	status = count;
-	missing = copy_to_user(buf, msg->rx, msg->rx_offset);
+	missing = copy_to_user(buf, msg->rx, msg->rx_actual_length);
 	if (missing == status)
 		status = -EFAULT;
 	else
 		status = status - missing;
 
-	mutex_unlock(&msg->buf_lock);
+	mutex_unlock(&msg->msg_lock);
 
 	return status;
 }
@@ -101,21 +116,29 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 			      size_t count, loff_t *f_pos)
 {
 	ssize_t status = 0;
-	struct spislave *slave;
+	int ret = 0;
 	unsigned long missing;
-	struct spislave_data *data;
-	struct spislave_msg *msg;
+	struct spislave_data *data = filp->private_data;
+	struct spislave *slave = data->slave;
+	struct spislave_message *msg = slave->msg;
 
-	data = filp->private_data;
-	slave = data->slave;
-	msg = slave->msg;
+	mutex_lock(&msg->msg_lock);
 
-	mutex_lock(&msg->buf_lock);
+	if (!msg->tx) {
+		msg->tx = kzalloc(msg->buf_depth, GFP_KERNEL);
+		if (!msg->tx)
+			return -ENOMEM;
+	} else
+		memset(msg->tx, 0, msg->buf_depth);
+
+	if (!msg->rx) {
+		msg->rx = kzalloc(msg->buf_depth, GFP_KERNEL);
+		if (!msg->rx)
+			return -ENOMEM;
+	}
 
 	if (count > msg->buf_depth)
 		return -EMSGSIZE;
-
-	memset(msg->tx, 0, msg->buf_depth);
 
 	missing = copy_from_user(msg->tx, buf, count);
 
@@ -124,20 +147,24 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 	else
 		status = -EFAULT;
 
-	mutex_unlock(&msg->buf_lock);
+	mutex_unlock(&msg->msg_lock);
+
+	if (msg->mode == SPISLAVE_MASTER_MODE) {
+		ret = spislave_transfer_msg(slave);
+		if (ret < 0)
+			status = -EFAULT;
+	}
 
 	return status;
 }
 
 static int spislave_release(struct inode *inode, struct file *filp)
 {
-	struct spislave *slave;
-	struct spislave_data *data;
+	struct spislave_data *data = filp->private_data;
+	struct spislave *slave = data->slave;
 
 	mutex_lock(&spislave_dev_list_lock);
 
-	data = filp->private_data;
-	slave = data->slave;
 	spislave_msg_remove(slave);
 
 	data->users--;
@@ -187,14 +214,10 @@ static int spislave_open(struct inode *inode, struct file *filp)
 static long spislave_ioctl(struct file *filp, unsigned int cmd,
 			   unsigned long arg)
 {
-	struct spislave *slave;
-	struct spislave_data *data;
-	struct spislave_messgae *msg;
+	struct spislave_data *data = filp->private_data;
+	struct spislave *slave = data->slave;
+	struct spislave_message *msg = slave->msg;
 	int ret = 0;
-
-	data = filp->private_data;
-	slave = data->slave;
-	msg = slave->msg;
 
 	mutex_lock(&msg->msg_lock);
 
@@ -223,10 +246,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_SUB_MODE:
-		ret = __put_user(msg->sub_mode, (__u8 __user *)arg);
-		break;
-
 	case SPISLAVE_WR_BITS_PER_WORD:
 		ret = __get_user(msg->bits_per_word, (__u32 __user *)arg);
 		break;
@@ -234,9 +253,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	case SPISLAVE_WR_MODE:
 		ret = __get_user(msg->mode, (__u8 __user *)arg);
 		break;
-
-	case SPISLAVE_WR_SUB_MODE:
-		ret = __get_user(msg->sub_mode, (__u8 __user *)arg);
 
 	case SPISLAVE_WR_BUF_DEPTH:
 		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
@@ -251,23 +267,19 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 	}
 
-	mutex_unlock(&slave->msg_lock);
+	mutex_unlock(&msg->msg_lock);
 	return ret;
 }
 
 static unsigned int spislave_event_poll(struct file *filp,
 					struct poll_table_struct *wait)
 {
-	struct spislave *slave;
-	struct spislave_data *data;
-	struct spislave_message *msg;
-
-	data = filp->private_data;
-	slave = data->slave;
-	msg = slave->msg;
+	struct spislave_data *data = filp->private_data;
+	struct spislave *slave = data->slave;
+	struct spislave_message *msg = slave->msg;
 
 	poll_wait(filp, &msg->wait, wait);
-	if (msg->rx_actual_length != 0)
+	if (msg->rx_actual_length > 0)
 		return POLLIN | POLLRDNORM;
 
 	return 0;
@@ -299,7 +311,7 @@ static int spislave_probe(struct spislave_device *spi)
 	data->slave = slave;
 	node = spi->dev.of_node;
 
-	if (slave == NULL) {
+	if (!slave) {
 		ret = -ENODEV;
 		goto err_out;
 	}

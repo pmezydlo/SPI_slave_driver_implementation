@@ -31,14 +31,6 @@ struct spislave_message {
 #define SPISLAVE_MASTER_MODE 0
 #define SPISLAVE_SLAVE_MODE 1
 
-/* support for the implementation of transfer which only
- * transmit and receive
- */
-	u8 sub_mode;
-#define SPISLAVE_TRANSMIT_RECEIVE_MODE 0
-#define SPISlAVE_RECEIVE_MODE 1
-#define SPISLAVE_TRANSMIT_MODE 2
-
 /* only in slave mode
  * |C|C|C|C| |C|C|C|C| - CLK
  * |A|A|A|A|           - DATA FROM MASTER
@@ -64,8 +56,8 @@ struct spislave {
 	struct device dev;
 	struct spislave_message *msg;
 
-	void (*transfer)(struct spislave *slave);
-	void (*cleanup)(struct spislave *slave);
+	int (*transfer_msg)(struct spislave *slave);
+	void (*clear_msg)(struct spislave *slave);
 };
 
 struct spislave_device_id {
@@ -85,6 +77,10 @@ struct spislave_driver {
 	int (*remove)(struct spislave_device *spi);
 	struct device_driver driver;
 };
+
+extern struct spislave_message *spislave_msg_alloc(struct spislave *slave);
+extern void spislave_msg_remove(struct spislave *slave);
+extern int spislave_transfer_msg(struct spislave *slave);
 
 extern int spislave_register_driver(struct spislave_driver *sdrv);
 extern void spislave_unregister_driver(struct spislave_driver *sdrv);
