@@ -114,9 +114,7 @@
 #define MCSPI_CHSTAT_TXFFE			BIT(3)
 
 struct mcspi_drv {
-	struct spislave *slave;
 	void __iomem *base;
-	u32 phys_addr;
 
 	unsigned int pin_dir;
 	u32 cs_sensitive;
@@ -181,6 +179,46 @@ void mcspi_slave_disable(struct mcspi_drv *mcspi)
 	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CTRL, val);
 }
 
+void mcspi_slave_pio_rx_transfer(unsigned long data)
+{
+
+}
+DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
+
+void mcspi_slave_pio_tx_transfer(struct mcspi_drv *mcspi)
+{
+
+}
+
+irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
+{
+
+	return (irq_handler_t) IRQ_HANDLED;
+}
+
+int mcspi_slave_set_irq(struct mcspi_drv *mcspi)
+{
+
+
+	return 0;
+}
+
+int mcspi_slave_setup_pio_trnasfer(struct mcspi_drv *mcspi)
+{
+
+	return 0;
+}
+
+void mcspi_slave_set_mode(struct mcspi_drv *mcspi)
+{
+
+}
+
+void mcspi_slave_set_cs(struct mcspi_drv *mcspi)
+{
+
+}
+
 int mcspi_slave_setup(struct mcspi_drv *mcspi)
 {
 
@@ -196,7 +234,6 @@ int mcspi_slave_transfer(struct spislave *slave)
 
 void mcspi_slave_clear(struct spislave *slave)
 {
-
 
 }
 
@@ -221,7 +258,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	const struct omap2_mcspi_platform_config *pdata;
 	struct spislave *slave;
 	struct mcspi_drv *mcspi;
-
 	int ret = 0;
 	u32 regs_offset = 0;
 
@@ -237,7 +273,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	mcspi = kzalloc(sizeof(*mcspi), GFP_KERNEL);
-	mcspi->slave = slave;
+	slave->spislave_gadget = mcspi;
 
 	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
@@ -295,7 +331,6 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	}
 
 	mcspi->cs_polarity = cs_polarity;
-	mcspi->phys_addr = cp_res.start;
 	mcspi->cs_sensitive = cs_sensitive;
 	mcspi->pin_dir = pin_dir;
 	mcspi->irq = irq;
@@ -335,11 +370,18 @@ disable_pm:
 
 free_slave:
 
+	if (!slave) {
+		put_device(&slave->dev);
+		mcspi_slave_clear(slave);
+	}
+
 	return ret;
 }
 
 static int mcspi_slave_remove(struct platform_device *pdev)
 {
+	tasklet_kill(&pio_rx_tasklet);
+
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);

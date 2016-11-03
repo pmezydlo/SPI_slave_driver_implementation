@@ -20,11 +20,11 @@
 #include <linux/of_irq.h>
 #include <linux/interrupt.h>
 #include <linux/uaccess.h>
+#include "spi-slave-core.h"
 
 #define DRIVER_NAME "spi-pru-slave"
 
-struct pruspi_slave {
-	struct device dev;
+struct pruspi_drv {
 	void __iomem *base;
 	int (*serve_irq)(int, void *);
 };
@@ -43,15 +43,44 @@ const struct of_device_id pruspi_slave_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, pruspi_slave_of_match);
 
+int pruspi_slave_transfer(struct spislave *slave)
+{
+	struct pruspi_drv *pruspi = (struct pruspi_drv *)slave->spislave_gadget;
+
+	return 0;
+}
+
 static int pruspi_slave_probe(struct platform_device *pdev)
 {
 	struct device_node *node;
+	struct spislave *slave;
+	struct pruspi_drv *pruspi;
+	const struct of_device_id *match;
+
 	int ret = 0;
 
-	node = pdev->dev.of_node;
+	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spislave));
+	if (slave == NULL)
+		return -EINVAL;
+
+	pruspi = kzalloc(sizeof(*pruspi), GFP_KERNEL);
+	slave->spislave_gadget = pruspi;
+
+	match = of_match_device(pruspi_slave_of_match, &pdev->dev);
+
+	if (!match) {
+		ret = -EINVAL;
+		goto free_slave;
+	}
+
+	platform_set_drvdata(pdev, pruspi);
 
 	pr_info("pru driver probe");
 	return ret;
+
+free_slave:
+
+	return 0;
 }
 
 static int pruspi_slave_remove(struct platform_device *pdev)

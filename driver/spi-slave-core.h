@@ -55,6 +55,7 @@ struct spislave_message {
 struct spislave {
 	struct device dev;
 	struct spislave_message *msg;
+	void *spislave_gadget;
 
 	int (*transfer_msg)(struct spislave *slave);
 	void (*clear_msg)(struct spislave *slave);
