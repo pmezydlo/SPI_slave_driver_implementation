@@ -228,7 +228,37 @@ int mcspi_slave_setup_pio_trnasfer(struct mcspi_drv *mcspi)
 
 void mcspi_slave_set_mode(struct mcspi_drv *mcspi)
 {
+	u32 val;
 
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_MODULCTRL);
+	val |= MCSPI_MODULCTRL_MS;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_MODULCTRL, val);
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0CONF);
+	val &= ~MCSPI_CHCONF_PHA;
+	val &= ~MCSPI_CHCONF_POL;
+
+	if (mcspi->pin_dir == MCSPI_PIN_DIR_D0_IN_D1_OUT) {
+		val &= ~MCSPI_CHCONF_IS;
+		val &= ~MCSPI_CHCONF_DPE1;
+		val |= MCSPI_CHCONF_DPE0;
+	} else {
+		val |= MCSPI_CHCONF_IS;
+		val |= MCSPI_CHCONF_DPE1;
+		val &= ~MCSPI_CHCONF_DPE0;
+	}
+
+	if (mcspi->pol == MCSPI_POL_HELD_HIGH)
+		val &= ~MCSPI_CHCONF_POL;
+	else
+		val |= MCSPI_CHCONF_POL;
+
+	if (mcspi->pha == MCSPI_PHA_ODD_NUMBERED_EDGES)
+		val &= ~MCSPI_CHCONF_PHA;
+	else
+		val |= MCSPI_CHCONF_PHA;
+
+	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CONF, val);
 }
 
 void mcspi_slave_set_cs(struct mcspi_drv *mcspi)
@@ -256,8 +286,21 @@ void mcspi_slave_set_cs(struct mcspi_drv *mcspi)
 int mcspi_slave_setup(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	int ret;
 
+	if (mcspi_slave_wait_for_bit(mcspi->base + MCSPI_SYSSTATUS,
+				     MCSPI_SYSSTATUS_RESETDONE) != 0) {
+		dev_dbg(&slave->dev, "internal module reset is on-going\n");
+		return -EIO;
+	}
 
+	mcspi_slave_disable(mcspi);
+	mcspi_slave_set_mode(mcspi);
+	mcspi_slave_set_cs(mcspi);
+	ret = mcspi_slave_set_irq(slave);
+
+	if (!ret)
+		return -EINTR;
 
 	return 0;
 }
