@@ -115,7 +115,6 @@
 
 struct mcspi_drv {
 	void __iomem *base;
-
 	unsigned int pin_dir;
 	u32 cs_sensitive;
 	u32 cs_polarity;
@@ -196,9 +195,27 @@ irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 	return (irq_handler_t) IRQ_HANDLED;
 }
 
-int mcspi_slave_set_irq(struct mcspi_drv *mcspi)
+int mcspi_slave_set_irq(struct spislave *slave)
 {
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	u32 val;
+	int ret;
 
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_IRQENABLE);
+	val &= ~MCSPI_IRQ_RX_FULL;
+	val &= ~MCSPI_IRQ_TX_EMPTY;
+	val |= MCSPI_IRQ_RX_FULL;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_IRQENABLE, val);
+
+	ret = devm_request_irq(&slave->dev, mcspi->irq,
+			  (irq_handler_t)mcspi_slave_irq,
+			  IRQF_TRIGGER_NONE,
+			  DRIVER_NAME, slave);
+
+	if (ret) {
+		dev_dbg(&slave->dev, "unable to request irq:%d\n", mcspi->irq);
+		return -EINTR;
+	}
 
 	return 0;
 }
@@ -216,25 +233,50 @@ void mcspi_slave_set_mode(struct mcspi_drv *mcspi)
 
 void mcspi_slave_set_cs(struct mcspi_drv *mcspi)
 {
+	u32 val;
 
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0CONF);
+
+	if (mcspi->cs_polarity == MCSPI_CS_POLARITY_ACTIVE_LOW)
+		val |= MCSPI_CHCONF_EPOL;
+	else
+		val &= ~MCSPI_CHCONF_EPOL;
+
+	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CONF, val);
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_MODULCTRL);
+
+	if (mcspi->cs_sensitive == MCSPI_CS_SENSITIVE_ENABLED)
+		val &= ~MCSPI_MODULCTRL_PIN34;
+	else
+		val |= MCSPI_MODULCTRL_PIN34;
+
+	mcspi_slave_write_reg(mcspi->base, MCSPI_MODULCTRL, val);
 }
 
-int mcspi_slave_setup(struct mcspi_drv *mcspi)
+int mcspi_slave_setup(struct spislave *slave)
 {
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+
+
 
 	return 0;
 }
 
 int mcspi_slave_transfer(struct spislave *slave)
 {
-
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
+	unsigned long flags;
 
 	return 0;
 }
 
 void mcspi_slave_clear(struct spislave *slave)
 {
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
 
+	pr_info("mcspi slave clear\n");
 }
 
 struct omap2_mcspi_platform_config mcspi_slave_pdata = {
@@ -272,8 +314,11 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (slave == NULL)
 		return -ENOMEM;
 
+	pr_info("alloc slave");
+
 	mcspi = kzalloc(sizeof(*mcspi), GFP_KERNEL);
 	slave->spislave_gadget = mcspi;
+	pr_info("alloc mcspi strust");
 
 	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
@@ -282,6 +327,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		ret = -EINVAL;
 		goto free_slave;
 	}
+
+	pr_info("of match device");
 
 	pdata = match->data;
 
@@ -315,6 +362,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	memcpy(&cp_res, res, sizeof(struct resource));
 
+	pr_info("irq, platform get resou ");
+
 	if (!res) {
 		ret = -ENODEV;
 		goto free_slave;
@@ -330,6 +379,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
+	pr_info("devm ioremap reso");
+
 	mcspi->cs_polarity = cs_polarity;
 	mcspi->cs_sensitive = cs_sensitive;
 	mcspi->pin_dir = pin_dir;
@@ -342,24 +393,31 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mcspi);
 
+	pr_info("platform set drv");
+
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
 	pm_runtime_enable(&pdev->dev);
 
 	ret = pm_runtime_get_sync(&pdev->dev);
-
 	if (ret < 0)
 		goto disable_pm;
 
-	ret = mcspi_slave_setup(mcspi);
+	pr_info("pm runtime");
+
+	ret = mcspi_slave_setup(slave);
 	if (ret < 0)
 		goto disable_pm;
+
+	pr_info("setup slave");
 
 	ret = devm_spislave_register_slave(&pdev->dev, slave);
 	if (ret) {
 		dev_dbg(&slave->dev, "register device error\n");
 		goto disable_pm;
 	}
+
+	pr_info("devm spislave register");
 
 	return ret;
 
