@@ -185,13 +185,110 @@ void mcspi_slave_pio_rx_transfer(unsigned long data)
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
-void mcspi_slave_pio_tx_transfer(struct mcspi_drv *mcspi)
+void mcspi_slave_pio_tx_transfer(struct spislave *slave)
 {
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
+	unsigned int word_counter;
+	void __iomem *tx_reg;
+	void __iomem *chstat;
 
+	tx_reg = mcspi->base + MCSPI_TX0;
+	chstat = mcspi->base + MCSPI_CH0STAT;
+	word_counter = MCSPI_MAX_FIFO_DEPTH / 2;
+
+	word_counter /= mcspi_slave_bytes_per_word(msg->bits_per_word);
+
+	if (msg->tx_actual_length >= msg->buf_depth) {
+		dev_dbg(&slave->dev, "end of tx buffer!\n");
+		msg->tx_actual_length = 0;
+		return;
+	}
+
+	switch (mcspi_slave_bytes_per_word(msg->bits_per_word)) {
+	case 1: {
+		const u8 *tx;
+
+		tx = msg->tx + msg->tx_actual_length;
+		msg->tx_actual_length += (sizeof(u8) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			writel_relaxed(*tx++, tx_reg);
+		} while (word_counter);
+	} break;
+
+	case 2: {
+		const u16 *tx;
+
+		tx = msg->tx + msg->tx_actual_length;
+		msg->tx_actual_length += (sizeof(u16) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			writel_relaxed(*tx++, tx_reg);
+		} while (word_counter);
+	} break;
+
+	case 4: {
+		const u32 *tx;
+
+		tx = msg->tx + msg->tx_actual_length;
+		msg->tx_actual_length += (sizeof(u32) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_TXS)
+						     < 0)
+				goto out;
+
+			writel_relaxed(*tx++, tx_reg);
+		} while (word_counter);
+	} break;
+
+	default:
+		return;
+	}
+
+	return;
+out:
+	dev_dbg(&slave->dev, "timeout!!!\n");
 }
 
 irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 {
+	struct spislave *slave = (struct spislave *)dev_id;
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
+	u32 val;
+	unsigned long flags;
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0STAT);
+
+	if (val & MCSPI_CHSTAT_EOT) {
+		spin_lock_irqsave(&msg->wait_lock, flags);
+		wake_up_all(&msg->wait);
+		spin_unlock_irqrestore(&msg->wait_lock, flags);
+		mcspi_slave_disable(mcspi);
+	}
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_IRQSTATUS);
+
+	if (val & MCSPI_IRQ_RX_FULL) {
+		val |= MCSPI_IRQ_RX_FULL;
+		pio_rx_tasklet.data = (unsigned long)slave;
+		tasklet_schedule(&pio_rx_tasklet);
+	}
+
+	mcspi_slave_write_reg(mcspi->base, MCSPI_IRQSTATUS, val);
 
 	return (irq_handler_t) IRQ_HANDLED;
 }
