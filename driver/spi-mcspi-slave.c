@@ -38,6 +38,7 @@
 #define MCSPI_POL_HELD_LOW			1
 #define MCSPI_PHA_ODD_NUMBERED_EDGES		0
 #define MCSPI_PHA_EVEN_NUMBERED_EDGES		1
+#define MCSPI_WORDS_PER_LOAD			1
 
 #define SPI_SLAVE_CS_SENSITIVE			MCSPI_CS_SENSITIVE_ENABLED
 #define SPI_SLAVE_CS_POLARITY			MCSPI_CS_POLARITY_ACTIVE_LOW
@@ -220,8 +221,31 @@ int mcspi_slave_set_irq(struct spislave *slave)
 	return 0;
 }
 
-int mcspi_slave_setup_pio_trnasfer(struct mcspi_drv *mcspi)
+int mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
 {
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
+	u32 val;
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_XFERLEVEL);
+	val &= ~MCSPI_XFER_AEL;
+	val &= ~MCSPI_XFER_AFL;
+	val |= (MCSPI_WORDS_PER_LOAD *
+		mcspi_slave_bytes_per_word(msg->bits_per_word)) << 8;
+	val &= ~MCSPI_XFER_WCNT;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_XFERLEVEL, val);
+
+	val = mcspi_slave_read_reg(mcspi->base,  MCSPI_CH0CONF);
+	val &= ~MCSPI_CHCONF_TRM;
+	val &= ~MCSPI_CHCONF_WL;
+	val |= (msg->bits_per_word - 1) << 7;
+	val &= ~MCSPI_CHCONF_FFER;
+	val &= ~MCSPI_CHCONF_FFEW;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CONF, val);
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_MODULCTRL);
+	val &= ~MCSPI_MODULCTRL_FDAA;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_MODULCTRL, val);
 
 	return 0;
 }
