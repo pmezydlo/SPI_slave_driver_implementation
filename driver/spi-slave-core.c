@@ -52,16 +52,20 @@ EXPORT_SYMBOL_GPL(spislave_msg_remove);
 
 int spislave_transfer_msg(struct spislave *slave)
 {
-	int ret = 0;
-	struct spislave_message *msg;
-
-	msg = slave->msg;
+	int ret;
 
 	ret = slave->transfer_msg(slave);
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(spislave_transfer_msg);
+
+int spislave_clear_transfer(struct spislave *slave)
+{
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(spislave_clear_transfer);
 
 /*============================================================================*/
 static int spislave_drv_probe(struct device *dev)

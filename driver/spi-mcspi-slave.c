@@ -181,11 +181,85 @@ void mcspi_slave_disable(struct mcspi_drv *mcspi)
 
 void mcspi_slave_pio_rx_transfer(unsigned long data)
 {
+	struct spislave *slave = (struct spislave *)data;
+	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
+	struct spislave_message *msg = slave->msg;
+	unsigned int word_counter;
+	void __iomem *rx_reg;
+	void __iomem *chstat;
 
+	rx_reg = mcspi->base + MCSPI_RX0;
+	chstat = mcspi->base + MCSPI_CH0STAT;
+
+	word_counter = MCSPI_WORDS_PER_LOAD;
+	word_counter /= mcspi_slave_bytes_per_word(msg->bits_per_word);
+
+	if (msg->rx_actual_length >= msg->buf_depth) {
+		dev_dbg(&slave->dev, "end of rx buffer!\n");
+		msg->rx_actual_length = 0;
+		return;
+	}
+
+	switch (mcspi_slave_bytes_per_word(msg->bits_per_word)) {
+	case 1: {
+		u8 *rx;
+
+		rx = msg->rx + msg->rx_actual_length;
+		msg->rx_actual_length += (sizeof(u8) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+		} while (word_counter);
+	} break;
+
+	case  2: {
+		u16 *rx;
+
+		rx = msg->rx + msg->rx_actual_length;
+		msg->rx_actual_length += (sizeof(u16) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+		} while (word_counter);
+	} break;
+
+	case 4: {
+		u32 *rx;
+
+		rx = msg->rx + msg->rx_actual_length;
+		msg->rx_actual_length += (sizeof(u32) * word_counter);
+
+		do {
+			word_counter -= 1;
+			if (mcspi_slave_wait_for_bit(chstat, MCSPI_CHSTAT_RXS)
+						     < 0)
+				goto out;
+
+			*rx++ = readl_relaxed(rx_reg);
+		} while (word_counter);
+	} break;
+
+	default:
+		return;
+	}
+
+	return;
+out:
+	dev_dbg(&slave->dev, "timeout!\n");
 }
 DECLARE_TASKLET(pio_rx_tasklet, mcspi_slave_pio_rx_transfer, 0);
 
-void mcspi_slave_pio_tx_transfer(struct spislave *slave)
+int mcspi_slave_pio_tx_transfer(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
 	struct spislave_message *msg = slave->msg;
@@ -202,7 +276,7 @@ void mcspi_slave_pio_tx_transfer(struct spislave *slave)
 	if (msg->tx_actual_length >= msg->buf_depth) {
 		dev_dbg(&slave->dev, "end of tx buffer!\n");
 		msg->tx_actual_length = 0;
-		return;
+		return -EMSGSIZE;
 	}
 
 	switch (mcspi_slave_bytes_per_word(msg->bits_per_word)) {
@@ -255,12 +329,13 @@ void mcspi_slave_pio_tx_transfer(struct spislave *slave)
 	} break;
 
 	default:
-		return;
+		return -EIO;
 	}
 
-	return;
+	return 0;
 out:
 	dev_dbg(&slave->dev, "timeout!!!\n");
+	return -EIO;
 }
 
 irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
@@ -318,7 +393,7 @@ int mcspi_slave_set_irq(struct spislave *slave)
 	return 0;
 }
 
-int mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
+void mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
 	struct spislave_message *msg = slave->msg;
@@ -343,8 +418,6 @@ int mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_MODULCTRL);
 	val &= ~MCSPI_MODULCTRL_FDAA;
 	mcspi_slave_write_reg(mcspi->base, MCSPI_MODULCTRL, val);
-
-	return 0;
 }
 
 void mcspi_slave_set_mode(struct mcspi_drv *mcspi)
@@ -430,7 +503,15 @@ int mcspi_slave_transfer(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
 	struct spislave_message *msg = slave->msg;
-	unsigned long flags;
+	int ret;
+
+	mcspi_slave_setup_pio_trnasfer(slave);
+	mcspi_slave_enable(mcspi);
+	msg->tx_actual_length = 0;
+	msg->rx_actual_length = 0;
+	ret = mcspi_slave_pio_tx_transfer(slave);
+	if (!ret)
+		return -EFAULT;
 
 	return 0;
 }
@@ -438,7 +519,12 @@ int mcspi_slave_transfer(struct spislave *slave)
 void mcspi_slave_clear(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
-	struct spislave_message *msg = slave->msg;
+	u32 val;
+
+	val = mcspi_slave_read_reg(mcspi->base, MCSPI_SYSCONFIG);
+	val |= MCSPI_SYSCONFIG_SOFTRESET;
+	mcspi_slave_write_reg(mcspi->base, MCSPI_SYSCONFIG, val);
+	mcspi_slave_disable(mcspi);
 
 	pr_info("mcspi slave clear\n");
 }
