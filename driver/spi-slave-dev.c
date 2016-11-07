@@ -72,6 +72,8 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	unsigned long flags;
 	int ret = 0;
 
+	pr_info("%s: function: read\n", DRIVER_NAME);
+
 	if (msg->mode == SPISLAVE_SLAVE_MODE) {
 		ret = spislave_transfer_msg(slave);
 		if (ret < 0)
@@ -138,6 +140,8 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 	struct spislave *slave = data->slave;
 	struct spislave_message *msg = slave->msg;
 
+	pr_info("%s: function: write\n", DRIVER_NAME);
+
 	mutex_lock(&msg->msg_lock);
 
 	if (!msg->tx) {
@@ -179,6 +183,8 @@ static int spislave_release(struct inode *inode, struct file *filp)
 	struct spislave_data *data = filp->private_data;
 	struct spislave *slave = data->slave;
 
+	pr_info("%s: function: release\n", DRIVER_NAME);
+
 	mutex_lock(&spislave_dev_list_lock);
 
 	spislave_msg_remove(slave);
@@ -195,6 +201,8 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	struct spislave *slave;
 	struct spislave_message *msg;
 	int ret = -ENXIO;
+
+	pr_info("%s: function: open\n", DRIVER_NAME);
 
 	mutex_lock(&spislave_dev_list_lock);
 
@@ -234,6 +242,8 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	struct spislave *slave = data->slave;
 	struct spislave_message *msg = slave->msg;
 	int ret = 0;
+
+	pr_info("%s: function: ioctl\n", DRIVER_NAME);
 
 	mutex_lock(&msg->msg_lock);
 
@@ -294,6 +304,8 @@ static unsigned int spislave_event_poll(struct file *filp,
 	struct spislave *slave = data->slave;
 	struct spislave_message *msg = slave->msg;
 
+	pr_info("%s: function: poll\n", DRIVER_NAME);
+
 	poll_wait(filp, &msg->wait, wait);
 	if (msg->rx_actual_length > 0)
 		return POLLIN | POLLRDNORM;
@@ -318,6 +330,8 @@ static int spislave_probe(struct spislave_device *spi)
 	struct spislave *slave;
 	struct device *dev;
 	struct device_node *node;
+
+	pr_info("%s: function: probe\n", DRIVER_NAME);
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -374,6 +388,8 @@ static int spislave_remove(struct spislave_device *spi)
 {
 	struct spislave_data *data = spislave_get_drv_data(spi);
 
+	pr_info("%s: function: remove\n", DRIVER_NAME);
+
 	data->slave = NULL;
 
 	mutex_lock(&spislave_dev_list_lock);
@@ -406,6 +422,8 @@ static int __init spislave_init(void)
 {
 	int ret = 0;
 
+	pr_info("%s: function: init\n", DRIVER_NAME);
+
 	ret = register_chrdev(SPISLAVE_MAJOR, DRIVER_NAME, &spislave_fops);
 	if (ret < 0)
 		return ret;
@@ -430,6 +448,9 @@ static int __init spislave_init(void)
 
 static void __exit spislave_exit(void)
 {
+
+	pr_info("%s: function: exit\n", DRIVER_NAME);
+
 	idr_destroy(&spislave_idr);
 	spislave_unregister_driver(&slave_driver);
 	class_destroy(spislave_class);

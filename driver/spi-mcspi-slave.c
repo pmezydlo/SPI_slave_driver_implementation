@@ -165,6 +165,7 @@ void mcspi_slave_enable(struct mcspi_drv *mcspi)
 {
 	u32 val;
 
+	pr_info("%s: function: enable\n", DRIVER_NAME);
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0CTRL);
 	val |= MCSPI_CHCTRL_EN;
 	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CTRL, val);
@@ -174,6 +175,7 @@ void mcspi_slave_disable(struct mcspi_drv *mcspi)
 {
 	u32 val;
 
+	pr_info("%s: function: disable\n", DRIVER_NAME);
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0CTRL);
 	val &= ~MCSPI_CHCTRL_EN;
 	mcspi_slave_write_reg(mcspi->base, MCSPI_CH0CTRL, val);
@@ -187,6 +189,8 @@ void mcspi_slave_pio_rx_transfer(unsigned long data)
 	unsigned int word_counter;
 	void __iomem *rx_reg;
 	void __iomem *chstat;
+
+	pr_info("%s: funtion: pio_rx_transfer\n", DRIVER_NAME);
 
 	rx_reg = mcspi->base + MCSPI_RX0;
 	chstat = mcspi->base + MCSPI_CH0STAT;
@@ -267,6 +271,8 @@ int mcspi_slave_pio_tx_transfer(struct spislave *slave)
 	void __iomem *tx_reg;
 	void __iomem *chstat;
 
+	pr_info("%s: function: pio_tx_transfer\n", DRIVER_NAME);
+
 	tx_reg = mcspi->base + MCSPI_TX0;
 	chstat = mcspi->base + MCSPI_CH0STAT;
 	word_counter = MCSPI_MAX_FIFO_DEPTH / 2;
@@ -346,6 +352,8 @@ irq_handler_t mcspi_slave_irq(unsigned int irq, void *dev_id)
 	u32 val;
 	unsigned long flags;
 
+	pr_info("%s: function: irq\n", DRIVER_NAME);
+
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0STAT);
 
 	if (val & MCSPI_CHSTAT_EOT) {
@@ -374,6 +382,8 @@ int mcspi_slave_set_irq(struct spislave *slave)
 	u32 val;
 	int ret;
 
+	pr_info("%s: function: set irq\n", DRIVER_NAME);
+
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_IRQENABLE);
 	val &= ~MCSPI_IRQ_RX_FULL;
 	val &= ~MCSPI_IRQ_TX_EMPTY;
@@ -399,6 +409,8 @@ void mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
 	struct spislave_message *msg = slave->msg;
 	u32 val;
 
+	pr_info("%s: function: setup pio transfer\n", DRIVER_NAME);
+
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_XFERLEVEL);
 	val &= ~MCSPI_XFER_AEL;
 	val &= ~MCSPI_XFER_AFL;
@@ -423,6 +435,8 @@ void mcspi_slave_setup_pio_trnasfer(struct spislave *slave)
 void mcspi_slave_set_mode(struct mcspi_drv *mcspi)
 {
 	u32 val;
+
+	pr_info("%s: function: set mode\n", DRIVER_NAME);
 
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_MODULCTRL);
 	val |= MCSPI_MODULCTRL_MS;
@@ -459,6 +473,8 @@ void mcspi_slave_set_cs(struct mcspi_drv *mcspi)
 {
 	u32 val;
 
+	pr_info("%s: function: set cs\n", DRIVER_NAME);
+
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_CH0CONF);
 
 	if (mcspi->cs_polarity == MCSPI_CS_POLARITY_ACTIVE_LOW)
@@ -481,6 +497,8 @@ int mcspi_slave_setup(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
 	int ret;
+
+	pr_info("%s: function: setup\n", DRIVER_NAME);
 
 	if (mcspi_slave_wait_for_bit(mcspi->base + MCSPI_SYSSTATUS,
 				     MCSPI_SYSSTATUS_RESETDONE) != 0) {
@@ -505,6 +523,8 @@ int mcspi_slave_transfer(struct spislave *slave)
 	struct spislave_message *msg = slave->msg;
 	int ret;
 
+	pr_info("%s: function: transfer\n", DRIVER_NAME);
+
 	mcspi_slave_setup_pio_trnasfer(slave);
 	mcspi_slave_enable(mcspi);
 	msg->tx_actual_length = 0;
@@ -520,6 +540,8 @@ void mcspi_slave_clear(struct spislave *slave)
 {
 	struct mcspi_drv *mcspi = (struct mcspi_drv *)slave->spislave_gadget;
 	u32 val;
+
+	pr_info("%s: function: clear\n", DRIVER_NAME);
 
 	val = mcspi_slave_read_reg(mcspi->base, MCSPI_SYSCONFIG);
 	val |= MCSPI_SYSCONFIG_SOFTRESET;
@@ -559,6 +581,8 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	unsigned int irq;
 	unsigned int pha;
 	unsigned int pol;
+
+	pr_info("%s: function: probe\n", DRIVER_NAME);
 
 	slave = spislave_alloc_slave(&pdev->dev, sizeof(struct spislave));
 	if (slave == NULL)
@@ -688,6 +712,8 @@ free_slave:
 
 static int mcspi_slave_remove(struct platform_device *pdev)
 {
+	pr_info("%s: function: remove\n", DRIVER_NAME);
+
 	tasklet_kill(&pio_rx_tasklet);
 
 	pm_runtime_dont_use_autosuspend(&pdev->dev);

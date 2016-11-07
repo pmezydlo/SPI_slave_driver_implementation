@@ -25,6 +25,8 @@ struct spislave_message *spislave_msg_alloc(struct spislave *slave)
 {
 	struct spislave_message *msg;
 
+	pr_info("%s: function: msg alloc\n", DRIVER_NAME);
+
 	msg = slave->msg;
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
@@ -44,6 +46,8 @@ void spislave_msg_remove(struct spislave *slave)
 {
 	struct spislave_message *msg;
 
+	pr_info("%s: function: msg remove\n", DRIVER_NAME);
+
 	slave->clear_msg(slave);
 	msg = slave->msg;
 	kfree(msg);
@@ -54,6 +58,8 @@ int spislave_transfer_msg(struct spislave *slave)
 {
 	int ret;
 
+	pr_info("%s: function: transfer msg\n", DRIVER_NAME);
+
 	ret = slave->transfer_msg(slave);
 
 	return ret;
@@ -62,6 +68,8 @@ EXPORT_SYMBOL_GPL(spislave_transfer_msg);
 
 int spislave_clear_transfer(struct spislave *slave)
 {
+	pr_info("%s: function: clear transfer\n", DRIVER_NAME);
+
 	slave->clear_msg(slave);
 
 	return 0;
@@ -74,6 +82,8 @@ static int spislave_drv_probe(struct device *dev)
 	int ret = 0;
 	const struct spislave_driver *sdrv;
 	struct spislave_device *sdev;
+
+	pr_info("%s: probe\n", DRIVER_NAME);
 
 	sdrv = to_spislave_drv(dev->driver);
 	sdev = to_spislave_dev(dev);
@@ -94,6 +104,8 @@ static int spislave_drv_remove(struct device *dev)
 	const struct spislave_driver *sdrv;
 	struct spislave_device *sdev;
 
+	pr_info("%s: remove\n", DRIVER_NAME);
+
 	sdrv = to_spislave_drv(dev->driver);
 
 	if (!sdrv)
@@ -112,6 +124,8 @@ static int spislave_drv_remove(struct device *dev)
 
 int spislave_register_driver(struct spislave_driver *sdrv)
 {
+	pr_info("%s: register driver\n", DRIVER_NAME);
+
 	sdrv->driver.owner = THIS_MODULE;
 	sdrv->driver.bus = &spislave_bus_type;
 
@@ -140,6 +154,8 @@ void spislave_unregister_slave(struct spislave *slave)
 {
 	int				dummy;
 
+	pr_info("%s: function: unregister slave\n", DRIVER_NAME);
+
 	dummy = device_for_each_child(&slave->dev, NULL, __unregister);
 	device_unregister(&slave->dev);
 }
@@ -156,6 +172,8 @@ static void spislave_dev_release(struct device *dev)
 	struct spislave_device *slave_dev = to_spislave_dev(dev);
 	struct spislave *slave;
 
+	pr_info("%s: function: adev release\n", DRIVER_NAME);
+
 	slave = slave_dev->slave;
 
 	put_device(&slave->dev);
@@ -165,6 +183,8 @@ static void spislave_dev_release(struct device *dev)
 static void spislave_release(struct device *dev)
 {
 	struct spislave *slave;
+
+	pr_info("%s: function: release\n", DRIVER_NAME);
 
 	slave = container_of(dev, struct spislave, dev);
 	kfree(slave);
@@ -179,6 +199,8 @@ static struct class spislave_class = {
 struct spislave *spislave_alloc_slave(struct device *dev, unsigned int size)
 {
 	struct spislave *slave;
+
+	pr_info("%s: function: alloc slave\n", DRIVER_NAME);
 
 	slave = kzalloc(size + sizeof(*slave), GFP_KERNEL);
 	if (!slave)
@@ -198,6 +220,8 @@ static struct spislave_device *spislave_register_device(struct spislave *slave,
 {
 	struct spislave_device *slave_dev;
 	int ret;
+
+	pr_info("%s: function: register device\n", DRIVER_NAME);
 
 	dev_dbg(&slave->dev, "chid node is found: %s\n", nc->full_name);
 
@@ -237,6 +261,8 @@ int spislave_register_devices(struct spislave *slave)
 	struct spislave_device *slave_dev;
 	struct device_node *nc;
 
+	pr_info("%s: function: register devices\n", DRIVER_NAME);
+
 	if (!slave->dev.of_node)
 		return -ENODEV;
 
@@ -257,6 +283,8 @@ int spislave_register_slave(struct spislave *slave, struct device *dev)
 {
 	int ret = 0;
 	struct device_node *node;
+
+	pr_info("%s: function: register slave\n", DRIVER_NAME);
 
 	if (!dev)
 		return -ENODEV;
@@ -284,6 +312,8 @@ int devm_spislave_register_slave(struct device *dev,
 	int ret = 0;
 	struct spislave **ptr;
 
+	pr_info("%s: function: devm register slave\n", DRIVER_NAME);
+
 	ptr = devres_alloc(devm_spislave_unregister_slave, sizeof(*ptr),
 			   GFP_KERNEL);
 	if (!ptr) {
@@ -304,6 +334,8 @@ EXPORT_SYMBOL_GPL(devm_spislave_register_slave);
 
 void spislave_unregister_device(struct spislave_device *sdev)
 {
+	pr_info("%s: function: function: unregister device\n", DRIVER_NAME);
+
 	if (!sdev)
 		return;
 
@@ -332,6 +364,8 @@ static int spislave_device_match(struct device *dev,
 	const struct spislave_driver *sdrv;
 	const struct spislave_device *sdev;
 
+	pr_info("%s: function: device match\n", DRIVER_NAME);
+
 	sdrv = to_spislave_drv(drv);
 	sdev = to_spislave_dev(dev);
 
@@ -353,6 +387,8 @@ static int __init spislave_init(void)
 {
 	int ret = 0;
 
+	pr_info("%s: function: init\n", DRIVER_NAME);
+
 	ret = bus_register(&spislave_bus_type);
 	if (ret < 0)
 		return ret;
@@ -366,6 +402,8 @@ static int __init spislave_init(void)
 
 static void __exit spislave_exit(void)
 {
+	pr_info("%s: function: exit\n", DRIVER_NAME);
+
 	bus_unregister(&spislave_bus_type);
 }
 
