@@ -30,6 +30,22 @@
 #define SPISLAVE_MAJOR		156
 #define SPISLAVE_MAX_MINOR	64
 
+static int buf_depth = 64;
+module_param(buf_depth, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(buf_depth, "Size of each tx and rx buffer[default 64 bytes]");
+
+static int word_after_data = 1;
+module_param(word_after_data, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(word_after_data, "The number of words after which slave starts to send data [default 64 bytes]");
+
+static int bits_per_word = 8;
+module_param(bits_per_word, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(word_after_data, "The number of bits per word [default 8 bits]");
+
+static int mode;
+module_param(mode, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(mode, "Selection of mode [default ?]");
+
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
 static DEFINE_MUTEX(spislave_dev_list_lock);

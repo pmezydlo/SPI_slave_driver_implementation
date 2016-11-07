@@ -62,6 +62,7 @@ EXPORT_SYMBOL_GPL(spislave_transfer_msg);
 
 int spislave_clear_transfer(struct spislave *slave)
 {
+	slave->clear_msg(slave);
 
 	return 0;
 }
