@@ -73,13 +73,13 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	int ret = 0;
 
 	pr_info("%s: function: read\n", DRIVER_NAME);
-
-	if (msg->mode == SPISLAVE_SLAVE_MODE) {
-		ret = spislave_transfer_msg(slave);
-		if (ret < 0)
-			status = -EFAULT;
-	}
-
+	/*
+	 *if (msg->mode == SPISLAVE_SLAVE_MODE) {
+	 *	ret = spislave_transfer_msg(slave);
+	 *	if (ret < 0)
+	 *		status = -EFAULT;
+	 *}
+	 */
 	spin_lock_irqsave(&msg->wait_lock, flags);
 
 	if (filp->f_flags & O_NONBLOCK) {
@@ -169,10 +169,11 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 
 	mutex_unlock(&msg->msg_lock);
 
-	if (msg->mode == SPISLAVE_MASTER_MODE) {
-		ret = spislave_transfer_msg(slave);
-		if (ret < 0)
-			status = -EFAULT;
+	/*if (msg->mode == SPISLAVE_MASTER_MODE) {*/
+	ret = spislave_transfer_msg(slave);
+	if (ret < 0) {
+		status = -EFAULT;
+		pr_info("%s: function: write - status:%d", DRIVER_NAME, status);
 	}
 
 	return status;

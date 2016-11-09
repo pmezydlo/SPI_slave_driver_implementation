@@ -301,7 +301,6 @@ int mcspi_slave_pio_tx_transfer(struct spislave *slave)
 			writel_relaxed(*tx++, tx_reg);
 		} while (word_counter);
 	} break;
-
 	case 2: {
 		const u16 *tx;
 
@@ -317,7 +316,6 @@ int mcspi_slave_pio_tx_transfer(struct spislave *slave)
 			writel_relaxed(*tx++, tx_reg);
 		} while (word_counter);
 	} break;
-
 	case 4: {
 		const u32 *tx;
 
@@ -333,7 +331,6 @@ int mcspi_slave_pio_tx_transfer(struct spislave *slave)
 			writel_relaxed(*tx++, tx_reg);
 		} while (word_counter);
 	} break;
-
 	default:
 		return -EIO;
 	}
@@ -511,7 +508,7 @@ int mcspi_slave_setup(struct spislave *slave)
 	mcspi_slave_set_cs(mcspi);
 	ret = mcspi_slave_set_irq(slave);
 
-	if (!ret)
+	if (ret < 0)
 		return -EINTR;
 
 	return 0;
@@ -529,8 +526,15 @@ int mcspi_slave_transfer(struct spislave *slave)
 	mcspi_slave_enable(mcspi);
 	msg->tx_actual_length = 0;
 	msg->rx_actual_length = 0;
+
+	pr_info("%s: var: mode=%d\n", DRIVER_NAME, msg->mode);
+	pr_info("%s: var: bits_per_word=%d\n", DRIVER_NAME, msg->bits_per_word);
+	pr_info("%s: var: word_after_data=%d\n", DRIVER_NAME,
+		msg->word_after_data);
+	pr_info("%s: var: buf_depth=%d\n", DRIVER_NAME, msg->buf_depth);
+
 	ret = mcspi_slave_pio_tx_transfer(slave);
-	if (!ret)
+	if (ret < 0)
 		return -EFAULT;
 
 	return 0;
@@ -547,8 +551,6 @@ void mcspi_slave_clear(struct spislave *slave)
 	val |= MCSPI_SYSCONFIG_SOFTRESET;
 	mcspi_slave_write_reg(mcspi->base, MCSPI_SYSCONFIG, val);
 	mcspi_slave_disable(mcspi);
-
-	pr_info("mcspi slave clear\n");
 }
 
 struct omap2_mcspi_platform_config mcspi_slave_pdata = {
@@ -588,11 +590,11 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (slave == NULL)
 		return -ENOMEM;
 
-	pr_info("alloc slave");
+	pr_info("%s: act: alloc slave", DRIVER_NAME);
 
 	mcspi = kzalloc(sizeof(*mcspi), GFP_KERNEL);
 	slave->spislave_gadget = mcspi;
-	pr_info("alloc mcspi strust");
+	pr_info("%s: act: alloc mcspi strust", DRIVER_NAME);
 
 	match = of_match_device(mcspi_slave_of_match, &pdev->dev);
 
@@ -602,7 +604,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
-	pr_info("of match device");
+	pr_info("%s: act: of match device", DRIVER_NAME);
 
 	pdata = match->data;
 
@@ -636,7 +638,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	memcpy(&cp_res, res, sizeof(struct resource));
 
-	pr_info("irq, platform get resou ");
+	pr_info("%s: act: irq, platform get resou", DRIVER_NAME);
 
 	if (!res) {
 		ret = -ENODEV;
@@ -653,7 +655,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto free_slave;
 	}
 
-	pr_info("devm ioremap reso");
+	pr_info("%s: act: devm ioremap reso", DRIVER_NAME);
 
 	mcspi->cs_polarity = cs_polarity;
 	mcspi->cs_sensitive = cs_sensitive;
@@ -667,7 +669,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mcspi);
 
-	pr_info("platform set drv");
+	pr_info("%s: act: platform set drv", DRIVER_NAME);
 
 	pm_runtime_use_autosuspend(&pdev->dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, SPI_AUTOSUSPEND_TIMEOUT);
@@ -677,13 +679,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	if (ret < 0)
 		goto disable_pm;
 
-	pr_info("pm runtime");
+	pr_info("%s: act: pm runtime", DRIVER_NAME);
 
 	ret = mcspi_slave_setup(slave);
 	if (ret < 0)
 		goto disable_pm;
 
-	pr_info("setup slave");
+	pr_info("%s: act: setup slave", DRIVER_NAME);
 
 	ret = devm_spislave_register_slave(&pdev->dev, slave);
 	if (ret) {
@@ -691,7 +693,7 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 		goto disable_pm;
 	}
 
-	pr_info("devm spislave register");
+	pr_info("%s: act: devm spislave register", DRIVER_NAME);
 
 	return ret;
 
