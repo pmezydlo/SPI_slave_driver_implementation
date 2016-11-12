@@ -1,3 +1,146 @@
-spi-slave-dev documentation...
+Overview of SPI slave userspace API for Linux
+=============================================
+Very often SPI slave device are cntrolled by a kernel driver, but thanks to
+this API, User can use it. Half-duplex and full duplex they are supported.
 
-upcoming...
+Some reasons you might want to use this API include:
+
+    * Simple protocols used to talk to microcontrollers acting as SPI slaves
+      or SPI masters.
+
+    * Support for master and slave mode.
+
+    * Very easy to implement
+
+Device can by used by one user at the same time.
+
+Device creation & Driver binding
+================================
+The simplest way to use this api is to add entry in DTB files:
+
+    spislave0@0 {
+        reg = <0>;
+        compatible = "linux, spislave";
+    };
+
+You have to add this entry as child-node. The child-node name is also the name
+for device. In this example the name is "spislave0".
+
+Implementation details & C examples
+===================================
+See the spislave_app.c sample program for one full-duplex transfer.
+
+So if you want to access an SPI device from a C program , first steps to do
+this is add "#include <linux/spi-slave-dev.c>". Now, you have to check which
+spi slave device you want to access. You should inspect /dev/ directory. You
+do it by "ls /dev/spislave*". This command showing Spi slave device.
+
+When you know which spi slave device you will use you can open it. Normal
+open() and close() operations on /dev/spislave* files work as you would
+expect. Opening the file looks like this:
+
+    int file;
+    char filename[20];
+    int spislave_nr = 0; /*your spi slave number*/
+
+    sprintf(filename, 19, "/dev/spislave%d", spislave_nr);
+    file = open(filename, O_RDWR);
+    if (file < 0) {
+        exit(1); /*make sure to check*/
+    }
+
+When you have opened the device, spi slave device allocates memory for your
+transfer. Each transfer has settings. Several ioctl() request allow to set
+up your transfer:
+
+    SPISLAVE_RD_MODE, SPISLAVE_WR_MODE
+        Spi slave subsystem allows to work on both master or slave mode. You
+        need to state which mode you want to use before transfer. Master mode
+        is the main mode and is set by default.
+
+    SPISLAVE_RD_BITS_PER_WORD, SPISLAVE_WR_BITS_PER_WORD
+        Indicates the number of bits per one word. The typical numer of bits
+        is 8, 16, 32. The default value is 8 bits.
+
+    SPISLAVE_RD_BUF_DEPTH, SPISLAVE_WR_BUF_DEPTH
+        Defines how deep is the spi transmit and receive buffer. The buffers
+        are allocated when you use write() or read() functions. The default
+        deep is 64 bytes.
+
+    SPISLAVE_RD_TX_ACTUAL_LENGTH, SPISLAVE_RD_RX_ACTUAL_LENGTH
+        When you want to monitore how much bytes is in tx and rx buffer.
+        You have to use it.
+
+    SPISLAVE_RD_LSB_FIRST, SPISLAVE_WR_LSB_FIRST
+        The bit justification used to transfer spi words. Zero indicates
+        MSB-first; other values indicate the less common LSB-first encoding.
+        MSB-first is set by default.
+
+    SPISLAVE_RD_MAX_SPEED, SPISLAVE_WR_MAX_SPEED
+        Only in master mode. The maximum SPI transfer speed in Hz. The spi
+        controller does not have to set this setting. Not every controller
+        supports it.
+
+Simple example how to use ioctl when you have put setting:
+
+    int ret;
+    unsigned int mode = 0;
+
+    ret = ioctl(file, SPISLAVE_WR_MODE, &mode);
+    if (ret < 1) {
+        exit(1);
+    }
+
+When you have get setting:
+
+    int ret;
+    unsigned int max_speed = 0;
+
+    ret = ioctl(file, SPISLAVE_RD_MAX_SPEED, &max_speed);
+    if (ret < 1) {
+        exit(1);
+    }
+
+All setting which isn't default you have to put before transfer. In master
+mode the transfer starts when you put message. This is should be done in such
+a way:
+
+    int ret;
+    char tx[] = {'S', 'P', 'I', ' ', 't', 'e', 's', 't'};
+    int size = 8;
+
+    ret = write(file, tx, size);
+    if (ret < 0) {
+        perror("Write message");
+        exit(1);
+    }
+
+Congratulations! Your message has been sent but this is not the end. Now I will
+show you how to receive a message. if you don't know how long is your message
+you can check it. Just use ioctl:
+
+    int ret;
+    unsigned int size;
+
+    ret = ioctl(file, SPISLAVE_RD_RX_ACTUAL_LENGTH, &size);
+    if (ret < 1) {
+        exit(1);
+    }
+
+Now you know how long is message. Next step is to read message, The reading is
+blocked until the end of the transfer. You can call read() functions and when
+the transfer ends message will be given to you:
+
+    char rx[size];
+
+    ret = read(file, rx, size);
+    if (ret < 0) {
+        perror("Read message");
+        exit(1);
+    }
+
+
+Finally you have to close file. After this operation all buffers will be
+released:
+
+    close(file);
