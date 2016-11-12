@@ -20,7 +20,6 @@ static uint32_t bits_per_word = 8;
 static uint8_t mode;
 static uint32_t buf_depth = 8;
 static uint32_t bytes_per_load = 4;
-static uint32_t word_after_data = 1;
 
 static int transfer_8bit(int fd)
 {
@@ -93,10 +92,6 @@ static int put_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_WR_WORD_AFTER_DATA, &word_after_data);
-	if (ret == -1)
-		return -1;
-
 	return ret;
 }
 
@@ -124,10 +119,6 @@ static int get_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_WORD_AFTER_DATA, &word_after_data);
-	if (ret == -1)
-		return -1;
-
 	return ret;
 }
 
@@ -135,8 +126,8 @@ static void print_setting(void)
 {
 	printf("TX length:%d, RX length:%d, Bits per word:%d\n",
 	       tx_actual_length, rx_actual_length, bits_per_word);
-	printf("BUF depth:%d, Mode:%d, Word after data:%d\n",
-	       buf_depth, mode, word_after_data);
+	printf("BUF depth:%d, Mode:%d\n",
+	       buf_depth, mode);
 }
 
 static void print_usage(const char *prog)
@@ -146,8 +137,6 @@ static void print_usage(const char *prog)
 	     "  -b --bpw	bits per word (default 8 bits)\n"
 	     "  -?  --help	print help\n"
 	     "  -e  --bd	slave buffer depth\n"
-	     "  -w  --w		the number of word after which slave starts\n"
-	     "                  to send data\n"
 	     "  -m  --m         slave mode 0-master, 1-slave\n"
 	     "\n");
 	exit(1);
@@ -159,7 +148,6 @@ static void parse_opts(int argc, char *argv[])
 		static const struct option lopts[] = {
 			{ "device", required_argument,	0, 'd' },
 			{ "bpw",    required_argument,	0, 'b' },
-			{ "w",	    required_argument,  0, 'w' },
 			{ "mode",   required_argument,  0, 'm' },
 			{ "bd",     required_argument,  0, 'e' },
 			{ "help",   no_argument,	0, '?' },
@@ -178,9 +166,6 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'b':
 			bits_per_word = atoi(optarg);
-			break;
-		case 'w':
-			word_after_data = atoi(optarg);
 			break;
 		case 'm':
 			mode = atoi(optarg);

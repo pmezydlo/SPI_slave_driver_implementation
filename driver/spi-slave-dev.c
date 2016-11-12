@@ -34,18 +34,6 @@ static int buf_depth = 64;
 module_param(buf_depth, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(buf_depth, "Size of each tx and rx buffer[default 64 bytes]");
 
-static int word_after_data = 1;
-module_param(word_after_data, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(word_after_data, "The number of words after which slave starts to send data [default 64 bytes]");
-
-static int bits_per_word = 8;
-module_param(bits_per_word, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(word_after_data, "The number of bits per word [default 8 bits]");
-
-static int mode;
-module_param(mode, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(mode, "Selection of mode [default ?]");
-
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
 static DEFINE_MUTEX(spislave_dev_list_lock);
@@ -261,16 +249,20 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(msg->bits_per_word, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_WORD_AFTER_DATA:
-		ret = __put_user(msg->word_after_data, (__u32 __user *)arg);
-		break;
-
 	case SPISLAVE_RD_MODE:
 		ret = __put_user(msg->mode, (__u8 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_BUF_DEPTH:
 		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_LSB_FIRST:
+		ret = __put_user(msg->lsb_first, (__u8 __user *)arg);
+		break;
+
+	case SPISLAVE_RD_MAX_SPEED:
+		ret = __put_user(msg->max_speed, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_BITS_PER_WORD:
@@ -285,8 +277,12 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_WR_WORD_AFTER_DATA:
-		ret = __get_user(msg->word_after_data, (__u32 __user *)arg);
+	case SPISLAVE_WR_LSB_FIRST:
+		ret = __get_user(msg->lsb_first, (__u8 __user *)arg);
+		break;
+
+	case SPISLAVE_WR_MAX_SPEED:
+		ret = __get_user(msg->max_speed, (__u32 __user *)arg);
 		break;
 
 	default:

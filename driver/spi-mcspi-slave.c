@@ -541,8 +541,6 @@ int mcspi_slave_transfer(struct spislave *slave)
 
 	pr_info("%s: var: mode=%d\n", DRIVER_NAME, msg->mode);
 	pr_info("%s: var: bits_per_word=%d\n", DRIVER_NAME, msg->bits_per_word);
-	pr_info("%s: var: word_after_data=%d\n", DRIVER_NAME,
-		msg->word_after_data);
 	pr_info("%s: var: buf_depth=%d\n", DRIVER_NAME, msg->buf_depth);
 
 	ret = mcspi_slave_pio_tx_transfer(slave);
