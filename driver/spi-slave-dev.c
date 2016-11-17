@@ -257,10 +257,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_LSB_FIRST:
-		ret = __put_user(msg->lsb_first, (__u8 __user *)arg);
-		break;
-
 	case SPISLAVE_RD_MAX_SPEED:
 		ret = __put_user(msg->max_speed, (__u32 __user *)arg);
 		break;
@@ -275,10 +271,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 
 	case SPISLAVE_WR_BUF_DEPTH:
 		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
-		break;
-
-	case SPISLAVE_WR_LSB_FIRST:
-		ret = __get_user(msg->lsb_first, (__u8 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_MAX_SPEED:

@@ -13,24 +13,49 @@
 
 #include <linux/types.h>
 
-#define SPISLAVE_IOC_MAGIC		'k'
+#define SPISLAVE_IOCTL_MAGIC		'k'
 
-#define SPISLAVE_RD_BITS_PER_WORD	_IOR(SPISLAVE_IOC_MAGIC, 1, __u8)
-#define SPISLAVE_WR_BITS_PER_WORD	_IOW(SPISLAVE_IOC_MAGIC, 1, __u8)
+#define SPISLAVE_SLAVE			0x01
+#define SPISLAVE_CPHA			0x02
+#define SPISLAVE_CPOL			0x04
+#define SPISLAVE_NO_CS			0x08
+#define SPISLAVE_CS_HIGH		0x10
+#define SPISLAVE_LSB_FIRST		0x20
 
-#define SPISLAVE_RD_MODE		_IOR(SPISLAVE_IOC_MAGIC, 2, __u8)
-#define SPISLAVE_WR_MODE		_IOW(SPISLAVE_IOC_MAGIC, 2, __u8)
+struct spislave_ioctl_transfer {
+	__u64	tx_buf;
+	__u64	rx_buf;
 
-#define SPISLAVE_RD_BUF_DEPTH		_IOR(SPISLAVE_IOC_MAGIC, 3, __u32)
-#define SPISLAVE_WR_BUF_DEPTH		_IOW(SPISLAVE_IOC_MAGIC, 3, __u32)
+	__u32	tx_actual_length;
+	__u32	rx_actual_length;
 
-#define SPISLAVE_RD_LSB_FIRST		_IOR(SPISLAVE_IOC_MAGIC, 4, __u8)
-#define SPISLAVE_WR_LSB_FIRST		_IOW(SPISLAVE_IOC_MAGIC, 4, __u8)
+	__u8	mode;
+	__u32	max_speed;
+	__u32	buf_depth;
+	__u8	bits_per_word;
+};
 
-#define SPISLAVE_RD_MAX_SPEED		_IOR(SPISLAVE_IOC_MAGIC, 5, __u32)
-#define SPISLAVE_WR_MAX_SPEED		_IOW(SPISLAVE_IOC_MAGIC, 5, __u32)
+#define SPISLAVE_MSGSIZE(N) \
+	((((N) * (sizeof(struct spislave_ioctl_transfer))) \
+	< (1 << _IOC_SIZEBITS)) \
+	? ((N) * (sizeof(struct spislave_ioctl_transfer))) : 0)
 
-#define SPISLAVE_RD_TX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOC_MAGIC, 6, __u32)
-#define SPISLAVE_RD_RX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOC_MAGIC, 7, __u32)
+#define SPISLAVE_IOCTL_MESSAGE(N) __IOC(SPISLAVE_IOCTL_MAGIC, 0, \
+					char[SPISLAVE_MSGSIZE(N)])
+
+#define SPISLAVE_RD_BITS_PER_WORD	_IOR(SPISLAVE_IOCTL_MAGIC, 1, __u8)
+#define SPISLAVE_WR_BITS_PER_WORD	_IOW(SPISLAVE_IOCTL_MAGIC, 1, __u8)
+
+#define SPISLAVE_RD_MODE		_IOR(SPISLAVE_IOCTL_MAGIC, 2, __u8)
+#define SPISLAVE_WR_MODE		_IOW(SPISLAVE_IOCTL_MAGIC, 2, __u8)
+
+#define SPISLAVE_RD_BUF_DEPTH		_IOR(SPISLAVE_IOCTL_MAGIC, 3, __u32)
+#define SPISLAVE_WR_BUF_DEPTH		_IOW(SPISLAVE_IOCTL_MAGIC, 3, __u32)
+
+#define SPISLAVE_RD_MAX_SPEED		_IOR(SPISLAVE_IOCTL_MAGIC, 5, __u32)
+#define SPISLAVE_WR_MAX_SPEED		_IOW(SPISLAVE_IOCTL_MAGIC, 5, __u32)
+
+#define SPISLAVE_RD_TX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 6, __u32)
+#define SPISLAVE_RD_RX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 7, __u32)
 
 #endif
