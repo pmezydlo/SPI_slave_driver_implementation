@@ -18,7 +18,6 @@ static uint32_t rx_actual_length;
 
 static uint32_t bits_per_word = 8;
 static uint8_t mode;
-static uint32_t buf_depth = 8;
 static uint32_t bytes_per_load = 4;
 
 static int transfer_8bit(int fd)
@@ -88,10 +87,6 @@ static int put_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_WR_BUF_DEPTH, &buf_depth);
-	if (ret == -1)
-		return -1;
-
 	return ret;
 }
 
@@ -111,10 +106,6 @@ static int get_setting(int fd)
 	if (ret == -1)
 		return -1;
 
-	ret = ioctl(fd, SPISLAVE_RD_BUF_DEPTH, &buf_depth);
-	if (ret == -1)
-		return -1;
-
 	ret = ioctl(fd, SPISLAVE_RD_MODE, &mode);
 	if (ret == -1)
 		return -1;
@@ -126,8 +117,7 @@ static void print_setting(void)
 {
 	printf("TX length:%d, RX length:%d, Bits per word:%d\n",
 	       tx_actual_length, rx_actual_length, bits_per_word);
-	printf("BUF depth:%d, Mode:%d\n",
-	       buf_depth, mode);
+	printf("Mode:%d\n", mode);
 }
 
 static void print_usage(const char *prog)
@@ -136,7 +126,6 @@ static void print_usage(const char *prog)
 	puts("  -d --device	device to use (default /dev/spislave1\n"
 	     "  -b --bpw	bits per word (default 8 bits)\n"
 	     "  -?  --help	print help\n"
-	     "  -e  --bd	slave buffer depth\n"
 	     "  -m  --m         slave mode 0-master, 1-slave\n"
 	     "\n");
 	exit(1);
@@ -149,13 +138,12 @@ static void parse_opts(int argc, char *argv[])
 			{ "device", required_argument,	0, 'd' },
 			{ "bpw",    required_argument,	0, 'b' },
 			{ "mode",   required_argument,  0, 'm' },
-			{ "bd",     required_argument,  0, 'e' },
 			{ "help",   no_argument,	0, '?' },
 			{ NULL,	    0,			0,  0  },
 		};
 		int c;
 
-		c = getopt_long(argc, argv, "d:b:w:m:e:?", lopts, NULL);
+		c = getopt_long(argc, argv, "d:b:w:m:?", lopts, NULL);
 
 		if (c == -1)
 			break;
@@ -169,9 +157,6 @@ static void parse_opts(int argc, char *argv[])
 			break;
 		case 'm':
 			mode = atoi(optarg);
-			break;
-		case 'e':
-			buf_depth = atoi(optarg);
 			break;
 		case '?':
 			print_usage(device);

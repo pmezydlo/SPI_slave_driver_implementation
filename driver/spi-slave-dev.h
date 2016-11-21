@@ -31,7 +31,6 @@ struct spislave_ioctl_transfer {
 
 	__u8	mode;
 	__u32	max_speed;
-	__u32	buf_depth;
 	__u8	bits_per_word;
 };
 
@@ -40,7 +39,7 @@ struct spislave_ioctl_transfer {
 	< (1 << _IOC_SIZEBITS)) \
 	? ((N) * (sizeof(struct spislave_ioctl_transfer))) : 0)
 
-#define SPISLAVE_IOCTL_MESSAGE(N) __IOC(SPISLAVE_IOCTL_MAGIC, 0, \
+#define SPISLAVE_MESSAGE(N) __IOC(SPISLAVE_IOCTL_MAGIC, 0, \
 					char[SPISLAVE_MSGSIZE(N)])
 
 #define SPISLAVE_RD_BITS_PER_WORD	_IOR(SPISLAVE_IOCTL_MAGIC, 1, __u8)
@@ -49,13 +48,10 @@ struct spislave_ioctl_transfer {
 #define SPISLAVE_RD_MODE		_IOR(SPISLAVE_IOCTL_MAGIC, 2, __u8)
 #define SPISLAVE_WR_MODE		_IOW(SPISLAVE_IOCTL_MAGIC, 2, __u8)
 
-#define SPISLAVE_RD_BUF_DEPTH		_IOR(SPISLAVE_IOCTL_MAGIC, 3, __u32)
-#define SPISLAVE_WR_BUF_DEPTH		_IOW(SPISLAVE_IOCTL_MAGIC, 3, __u32)
+#define SPISLAVE_RD_MAX_SPEED		_IOR(SPISLAVE_IOCTL_MAGIC, 3, __u32)
+#define SPISLAVE_WR_MAX_SPEED		_IOW(SPISLAVE_IOCTL_MAGIC, 3, __u32)
 
-#define SPISLAVE_RD_MAX_SPEED		_IOR(SPISLAVE_IOCTL_MAGIC, 5, __u32)
-#define SPISLAVE_WR_MAX_SPEED		_IOW(SPISLAVE_IOCTL_MAGIC, 5, __u32)
-
-#define SPISLAVE_RD_TX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 6, __u32)
-#define SPISLAVE_RD_RX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 7, __u32)
+#define SPISLAVE_RD_TX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 4, __u32)
+#define SPISLAVE_RD_RX_ACTUAL_LENGTH	_IOR(SPISLAVE_IOCTL_MAGIC, 5, __u32)
 
 #endif

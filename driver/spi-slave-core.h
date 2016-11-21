@@ -28,8 +28,6 @@ struct spislave_message {
 
 /*selection of master and slave mode*/
 	u8 mode;
-#define SPISLAVE_MASTER_MODE 0
-#define SPISLAVE_SLAVE_MODE 1
 
 /*the number of bits per word*/
 	u32 bits_per_word;
@@ -40,8 +38,6 @@ struct spislave_message {
 	u32 max_speed;
 
 	u8 lsb_first;
-#define SPISLAVE_MSB_FIRST 0
-#define SPISLAVE_LSB_FIRST 1
 
 	wait_queue_head_t wait;
 	spinlock_t wait_lock;

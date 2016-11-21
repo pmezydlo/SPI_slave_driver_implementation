@@ -230,6 +230,10 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 	struct spislave_data *data = filp->private_data;
 	struct spislave *slave = data->slave;
 	struct spislave_message *msg = slave->msg;
+
+	struct spislave_ioctl_transfer *ioctl_msg;
+	u32 size_msg;
+
 	int ret = 0;
 
 	pr_info("%s: function: ioctl\n", DRIVER_NAME);
@@ -253,10 +257,6 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __put_user(msg->mode, (__u8 __user *)arg);
 		break;
 
-	case SPISLAVE_RD_BUF_DEPTH:
-		ret = __put_user(msg->buf_depth, (__u32 __user *)arg);
-		break;
-
 	case SPISLAVE_RD_MAX_SPEED:
 		ret = __put_user(msg->max_speed, (__u32 __user *)arg);
 		break;
@@ -269,15 +269,34 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		ret = __get_user(msg->mode, (__u8 __user *)arg);
 		break;
 
-	case SPISLAVE_WR_BUF_DEPTH:
-		ret = __get_user(msg->buf_depth, (__u32 __user *)arg);
-		break;
-
 	case SPISLAVE_WR_MAX_SPEED:
 		ret = __get_user(msg->max_speed, (__u32 __user *)arg);
 		break;
 
 	default:
+
+		size_msg = _IOC_SIZE(cmd);
+		pr_info("%s: ioctl size_msg:%d/n", DRIVER_NAME, size_msg);
+
+		ioctl_msg = kzalloc(size_msg, GFP_KERNEL);
+
+		if (__copy_from_user(ioctl_msg,
+				    (struct spilave_ioctl_transfer __user *)arg,
+				    size_msg)) {
+			kfree(ioctl_msg);
+			return -EFAULT;
+		}
+
+		pr_info("%s: ioctl msg: mode:%d\n", DRIVER_NAME,
+			ioctl_msg->mode);
+		pr_info("%s: ioctl max_speed:%d\n", DRIVER_NAME,
+			ioctl_msg->max_speed);
+		pr_info("%s: ioctl bits_per_word:%d\n", DRIVER_NAME,
+			ioctl_msg->bits_per_word);
+		pr_info("%s: ioctl tx actual_length:%d\n", DRIVER_NAME,
+			ioctl_msg->tx_actual_length);
+		pr_info("%s: ioctl rx actual_length:%d\n", DRIVER_NAME,
+			ioctl_msg->rx_actual_length);
 
 		break;
 	}
