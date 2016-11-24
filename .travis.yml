@@ -11,7 +11,7 @@ before_install:
   - tar xf gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf.tar.xz
   - export PATH=$PATH:$PWD/gcc-linaro-5.3-2016.02-x86_64_arm-linux-gnueabihf/bin/
   - arm-linux-gnueabihf-gcc --version
-  
+  - sudo apt-get install python3
   - sudo apt-get install bc
 
 before_script:
@@ -57,4 +57,6 @@ script:
   - sudo dtc -O dtb -o PRU0_SPI_slave-00A0.dtbo -b 0 -@ PRU0_SPI_slave.dts
   - sudo dtc -O dtb -o PRU1_SPI_slave-00A0.dtbo -b 0 -@ PRU1_SPI_slave.dts
 
+  - cd $DST_PROJECT/python_lib/
+  - sudo python3 setup.py install
 
