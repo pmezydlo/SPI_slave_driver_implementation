@@ -155,45 +155,52 @@ static PyMethodDef SPIslave_methods[] =
 };
 
 static int
-__SPIslave_set_mode(SPIslave *self)
+__SPIslave_set_mode(SPIslave *self, __u8 tmp)
 {
-	if (ioctl(self->fd, SPISLAVE_WR_MODE, &self->mode) == -1) {
+	if (ioctl(self->fd, SPISLAVE_WR_MODE, &tmp) == -1) {
 		PyErr_SetFromErrno(PyExc_IOError);
 		return -1;
 	}
 	return 0;
 }
 
-static __u8
-__SPIslave_get_mode(SPIslave *self)
-{
-	__u8 mode;
-
-	if (ioctl(self->fd, SPISLAVE_RD_MODE, &mode) == -1) {
-		PyErr_SetFromErrno(PyExc_IOError);
-		return -1;
-	}
-
-	if (mode < 0) {
-		return -1;
-	}
-
-	return mode;
-}
-
 static PyObject*
 SPIslave_get_mode(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL;/*now is null dont use it*/
+	PyObject *result = Py_BuildValue("i", self->mode);
+	Py_INCREF(result);
 
-	__SPIslave_get_mode(self);
 	return result;
 }
 
 static int
 SPIslave_set_mode(SPIslave *self, PyObject *val, void *closure)
 {
-	__SPIslave_set_mode(self);
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	}
+
+	if (PyLong_Check(val)) {
+		tmp = PyInt_AsLong(val);
+	} else {
+		PyErr_SetString(PyExc_TypeError, "value must be integer");
+		return -1;
+	}
+
+	if (tmp >= 0x3F) {
+		PyErr_SetString(PyExc_TypeError, "the mode must be between 0 and 63.");
+		return -1;
+	}
+
+	if (self->mode != tmp) {
+		if (__SPIslave_set_mode(self, tmp) < 0) {
+			return -1;
+		}
+		self->mode = tmp;
+	}
 
 	return 0;
 }
@@ -201,7 +208,8 @@ SPIslave_set_mode(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_bits_per_word(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /**now is null dont use it*/
+	PyObject *result = Py_BuildValue("i", self->bits_per_word);
+	Py_INCREF(result);
 
 	return result;
 }
@@ -209,6 +217,32 @@ SPIslave_get_bits_per_word(SPIslave *self, void *closure)
 static int
 SPIslave_set_bits_per_word(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	}
+
+	if (PyLong_Check(val)) {
+		tmp = PyInt_AsLong(val);
+	} else {
+		PyErr_SetString(PyExc_TypeError, "value must be integer");
+		return -1;
+	}
+
+	if (tmp > 64) {
+		PyErr_SetString(PyExc_TypeError, "the bits per word must be between 0 and 64.");
+		return -1;
+	}
+
+	if (self->bits_per_word != tmp) {
+		if (ioctl(self->fd, SPISLAVE_WR_BITS_PER_WORD, &tmp) == -1) {
+			PyErr_SetFromErrno(PyExc_IOError);
+			return -1;
+		}
+		self->bits_per_word = tmp;
+	}
 
 	return 0;
 }
@@ -216,7 +250,8 @@ SPIslave_set_bits_per_word(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_max_speed(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result = Py_BuildValue("i", self->max_speed);
+	Py_INCREF(result);
 
 	return result;
 }
@@ -224,15 +259,37 @@ SPIslave_get_max_speed(SPIslave *self, void *closure)
 static int
 SPIslave_set_max_speed(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	}
+
+	if (PyLong_Check(val)) {
+		tmp = PyInt_AsLong(val);
+	} else {
+		PyErr_SetString(PyExc_TypeError, "value must be integer");
+		return -1;
+	}
+
+	if (self->max_speed != tmp) {
+		if (ioctl(self->fd, SPISLAVE_WR_MAX_SPEED, &tmp) == -1) {
+			PyErr_SetFromErrno(PyExc_IOError);
+			return -1;
+		}
+		self->max_speed = tmp;
+	}
 
 	return 0;
 }
 
+
 static PyObject*
 SPIslave_get_tx_actual_length(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL;
-
+	PyObject *result = Py_BuildValue("i", self->tx_actual_length);
+	Py_INCREF(result);
 
 	return result;
 }
@@ -240,8 +297,8 @@ SPIslave_get_tx_actual_length(SPIslave *self, void *closure)
 static PyObject*
 SPIslave_get_rx_actual_length(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL;
-
+	PyObject *result = Py_BuildValue("i", self->rx_actual_length);
+	Py_INCREF(result);
 
 	return result;
 }
@@ -249,14 +306,39 @@ SPIslave_get_rx_actual_length(SPIslave *self, void *closure)
 static PyObject*
 SPIslave_get_SLAVE(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_SLAVE)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_SLAVE(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the slave must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_SLAVE;
+	else
+		tmp = self->mode & ~SPISLAVE_SLAVE;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
@@ -264,14 +346,39 @@ SPIslave_set_SLAVE(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_CPOL(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_CPOL)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_CPOL(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the CPOL must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_CPOL;
+	else
+		tmp = self->mode & ~SPISLAVE_CPOL;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
@@ -279,14 +386,39 @@ SPIslave_set_CPOL(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_CPHA(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_CPHA)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_CPHA(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the CPHA must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_CPHA;
+	else
+		tmp = self->mode & ~SPISLAVE_CPHA;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
@@ -294,14 +426,39 @@ SPIslave_set_CPHA(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_NO_CS(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_NO_CS)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_NO_CS(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the NO_CS must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_NO_CS;
+	else
+		tmp = self->mode & ~SPISLAVE_NO_CS;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
@@ -309,14 +466,39 @@ SPIslave_set_NO_CS(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_CS_HIGH(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_CS_HIGH)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_CS_HIGH(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the CS_HIGH must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_CS_HIGH;
+	else
+		tmp = self->mode & ~SPISLAVE_CS_HIGH;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
@@ -324,14 +506,39 @@ SPIslave_set_CS_HIGH(SPIslave *self, PyObject *val, void *closure)
 static PyObject*
 SPIslave_get_LSB_FIRST(SPIslave *self, void *closure)
 {
-	PyObject *result = NULL; /*now is NULL dont use it*/
+	PyObject *result;
 
+	if (self->mode & SPISLAVE_LSB_FIRST)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
 	return result;
 }
 
 static int
 SPIslave_set_LSB_FIRST(SPIslave *self, PyObject *val, void *closure)
 {
+	uint8_t tmp;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "value is invalid");
+		return -1;
+	} else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "the LSB_FIRST must be boolean");
+		return -1;
+	}
+
+	if (val == Py_True)
+		tmp = self->mode | SPISLAVE_LSB_FIRST;
+	else
+		tmp = self->mode & ~SPISLAVE_LSB_FIRST;
+
+	if (__SPIslave_set_mode(self, tmp) < 0) {
+		return -1;
+	}
+	self->mode = tmp;
 
 	return 0;
 }
