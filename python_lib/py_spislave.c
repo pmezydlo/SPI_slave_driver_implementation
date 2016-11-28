@@ -629,32 +629,32 @@ static PyGetSetDef SPIslave_getset[] = {
 	(setter)SPIslave_set_mode,
 	"spislave mode"},
 
-	{"SPIslave_SLAVE",
+	{"SLAVE",
 	(getter)SPIslave_get_SLAVE,
 	(setter)SPIslave_set_SLAVE,
 	""},
 
-	{"SPIslave_CPHA",
+	{"CPHA",
 	(getter)SPIslave_get_CPHA,
 	(setter)SPIslave_set_CPHA,
 	""},
 
-	{"SPIslave_CPOL",
+	{"CPOL",
 	(getter)SPIslave_get_CPOL,
 	(setter)SPIslave_set_CPOL,
 	""},
 
-	{"SPIslave_NO_CS",
+	{"NO_CS",
 	(getter)SPIslave_get_NO_CS,
 	(setter)SPIslave_set_NO_CS,
 	""},
 
-	{"SPIslave_CS_HIGH",
+	{"CS_HIGH",
 	(getter)SPIslave_get_CS_HIGH,
 	(setter)SPIslave_set_CS_HIGH,
 	""},
 
-	{"SPIslave_LSB_FIRST",
+	{"LSB_FIRST",
 	(getter)SPIslave_get_LSB_FIRST,
 	(setter)SPIslave_set_LSB_FIRST,
 	""},

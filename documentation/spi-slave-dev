@@ -26,7 +26,7 @@ The simplest way to use this api is to add entry in DTB files:
 You have to add this entry as child-node. The child-node name is also the name
 for device. In this example the name is "spislave0".
 
-Implementation details & C examples
+Implementation details & C and Python examples
 ===================================
 See the spislave_app.c sample program for one full-duplex transfer.
 
@@ -35,10 +35,14 @@ this is add "#include <linux/spi-slave-dev.c>". Now, you have to check which
 spi slave device you want to access. You should inspect /dev/ directory. You
 do it by "ls /dev/spislave*". This command showing Spi slave device.
 
+From Python script, first steps to do this is import SPIslave module. This
+line will do this: "import SPIslave"
+
 When you know which spi slave device you will use you can open it. Normal
 open() and close() operations on /dev/spislave* files work as you would
 expect. Opening the file looks like this:
 
+C example:
     int file;
     char filename[20];
     int spislave_nr = 0; /*your spi slave number*/
@@ -49,32 +53,56 @@ expect. Opening the file looks like this:
         exit(1); /*make sure to check*/
     }
 
+Python example:
+    import SPIslave
+    spislave_nr = 1
+
+    spi = SPIslave.SPIslave(spislave_nr)
+
 When you have opened the device, spi slave device allocates memory for your
 transfer. Each transfer has settings. Several ioctl() request allow to set
 up your transfer:
 
     SPISLAVE_RD_MODE, SPISLAVE_WR_MODE
-        Spi slave subsystem allows to work on both master or slave mode. You
-        need to state which mode you want to use before transfer. Master mode
-        is the main mode and is set by default.
+        Defines basic setting of SPI transfer.
+
+        |  BIT(S) | FIELD NAME |                 DESCRIPTION                  |
+        +---------+------------+----------------------------------------------+
+        |    5    | LSB_FIRST  |The bit justification used to transfer spi    |
+        |         |            |words. Zero indicates MSB-first; other values |
+        |         |            |indicate the less common LSB-first encoding.  |
+        |         |            |MSB-first is set by default.                  |
+        +---------+------------+-----------------------------------------------
+        |    4    | CS_HIGH    |That is CS_HIGH means when the CS line state  |
+        |         |            |is high actives the receiving device.         |
+        +---------+------------+----------------------------------------------+
+        |    3    | NO_CS      |If NO_CS is zero, that CS is active,          |
+        |         |            |when NO_CS is set, CS line is not active.     |
+        +---------+------------+----------------------------------------------+
+        |    2    | CPOL       |If CPOL is zero, than SCLK is normally low,   |
+        |         |            |and the first clock edge is a rising edge.    |
+        |         |            |If CPOL is one, SCLK is normally high, and the|
+        |         |            |first clock edge is a falling edge.           |
+        +---------+------------+----------------------------------------------+
+        |    1    | CPHA       |That is CPHA=0 means sampling on the first    |
+        |         |            |clock edge, while CPHA=1 means sampling on the|
+        |         |            |second clock edge, regardless of whether that |
+        |         |            |clock edge is rising or falling.              |
+        +---------+------------+----------------------------------------------+
+        |    0    | SLAVE      |Spi slave subsystem allows to work on both    |
+        |         |            |master or slave mode. You need to state which |
+        |         |            |mode you want to use before transfer.         |
+        |         |            |Master mode is the main mode and is set by    |
+        |         |            |default.                                      |
+        +---------+------------+----------------------------------------------+
 
     SPISLAVE_RD_BITS_PER_WORD, SPISLAVE_WR_BITS_PER_WORD
         Indicates the number of bits per one word. The typical numer of bits
         is 8, 16, 32. The default value is 8 bits.
 
-    SPISLAVE_RD_BUF_DEPTH, SPISLAVE_WR_BUF_DEPTH
-        Defines how deep is the spi transmit and receive buffer. The buffers
-        are allocated when you use write() or read() functions. The default
-        deep is 64 bytes.
-
     SPISLAVE_RD_TX_ACTUAL_LENGTH, SPISLAVE_RD_RX_ACTUAL_LENGTH
         When you want to monitore how much bytes is in tx and rx buffer.
         You have to use it.
-
-    SPISLAVE_RD_LSB_FIRST, SPISLAVE_WR_LSB_FIRST
-        The bit justification used to transfer spi words. Zero indicates
-        MSB-first; other values indicate the less common LSB-first encoding.
-        MSB-first is set by default.
 
     SPISLAVE_RD_MAX_SPEED, SPISLAVE_WR_MAX_SPEED
         Only in master mode. The maximum SPI transfer speed in Hz. The spi
@@ -83,16 +111,26 @@ up your transfer:
 
 Simple example how to use ioctl when you have put setting:
 
+C example:
     int ret;
     unsigned int mode = 0;
+
+    mode |= SPISLAVE_CPOL | SPISLAVE_CPHA | SPISLAVE_NO_CS;
 
     ret = ioctl(file, SPISLAVE_WR_MODE, &mode);
     if (ret < 1) {
         exit(1);
     }
 
+Python example:
+    spislave.CPHA = 1
+    spislave.CPOL = 1
+    spislave.max_speed = 5000
+
+
 When you have get setting:
 
+C example:
     int ret;
     unsigned int max_speed = 0;
 
@@ -101,10 +139,15 @@ When you have get setting:
         exit(1);
     }
 
+Python example:
+    max_speed = spislave.max_speed
+    cpol = spislave.cpol
+
 All setting which isn't default you have to put before transfer. In master
 mode the transfer starts when you put message. This is should be done in such
 a way:
 
+C example:
     int ret;
     char tx[] = {'S', 'P', 'I', ' ', 't', 'e', 's', 't'};
     int size = 8;
@@ -115,10 +158,14 @@ a way:
         exit(1);
     }
 
+Python example:
+    spislave.write([0xDE, 0xAD, 0xBE, 0xEF])
+
 Congratulations! Your message has been sent but this is not the end. Now I will
 show you how to receive a message. if you don't know how long is your message
 you can check it. Just use ioctl:
 
+C example:
     int ret;
     unsigned int size;
 
@@ -127,10 +174,14 @@ you can check it. Just use ioctl:
         exit(1);
     }
 
+Python example:
+    size = spislave.rx_actual_length
+
 Now you know how long is message. Next step is to read message, The reading is
 blocked until the end of the transfer. You can call read() functions and when
 the transfer ends message will be given to you:
 
+C example:
     char rx[size];
 
     ret = read(file, rx, size);
@@ -139,8 +190,15 @@ the transfer ends message will be given to you:
         exit(1);
     }
 
+Python example:
+    resp = spislave.read()
+    print resp;
 
 Finally you have to close file. After this operation all buffers will be
 released:
 
+C example:
     close(file);
+
+Python example:
+    spislave.close()
