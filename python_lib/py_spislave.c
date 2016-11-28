@@ -10,7 +10,7 @@
 
 #define MAX_PATH	4096
 
-// Macros needed for Python 3
+/* Macros needed for Python 3*/
 #ifndef PyInt_Check
 #define PyInt_Check	PyLong_Check
 #define PyInt_FromLong	PyLong_FromLong
@@ -29,11 +29,13 @@ typedef struct {
 	uint8_t		bits_per_word;
 } SPIslave;
 
-static PyObject*
-SPIslave_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+static PyObject *SPIslave_new(PyTypeObject *type, PyObject *args,
+			      PyObject *kwds)
 {
 	SPIslave *self;
-	if ((self = (SPIslave *)type->tp_alloc(type, 0)) == NULL)
+
+	self = (SPIslave *)type->tp_alloc(type, 0);
+	if (self == NULL)
 		return NULL;
 
 	self->fd = -1;
@@ -46,14 +48,12 @@ SPIslave_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 	return (PyObject *)self;
 }
 
-static PyObject*
-SPIslave_open(SPIslave* self, PyObject* args)
+static PyObject *SPIslave_open(SPIslave *self, PyObject *args)
 {
 	int device;
 	char path[MAX_PATH];
 	uint32_t tmp32;
 	uint8_t tmp8;
-
 
 	if (self == NULL)
 		printf("self is NULL\n");
@@ -62,7 +62,8 @@ SPIslave_open(SPIslave* self, PyObject* args)
 		return NULL;
 
 	if (snprintf(path, MAX_PATH, "/dev/spislave%d", device) >= MAX_PATH) {
-		PyErr_SetString(PyExc_OverflowError, "Device number is invalid.");
+		PyErr_SetString(PyExc_OverflowError,
+				"Device number is invalid.");
 		return NULL;
 	}
 
@@ -105,11 +106,11 @@ SPIslave_open(SPIslave* self, PyObject* args)
 	Py_RETURN_NONE;
 }
 
-static PyObject*
-SPIslave_close(SPIslave* self)
+static PyObject *SPIslave_close(SPIslave *self)
 {
 	if ((self->fd != -1) && (close(self->fd) == -1)) {
 		PyErr_SetFromErrno(PyExc_IOError);
+		return NULL;
 	}
 
 	self->fd = -1;
@@ -122,40 +123,136 @@ SPIslave_close(SPIslave* self)
 	Py_RETURN_NONE;
 }
 
-static void
-SPIslave_dealloc(SPIslave *self)
+static void SPIslave_dealloc(SPIslave *self)
 {
 	PyObject *ref = SPIslave_close(self);
+
 	printf("spi slave dealoc python mod");
-
-	Py_XDECREF(ref);;
+	Py_XDECREF(ref);
 }
 
-static PyObject *
-SPIslave_read(SPIslave* self, PyObject* args)
+static PyObject *SPIslave_read(SPIslave *self, PyObject *args)
 {
+	uint8_t rx[MAX_PATH];
+	int status, len, i;
+	PyObject *list;
 
-	return 0;
+	if (!PyArg_ParseTuple(args, "i:read", &len))
+		return NULL;
+
+	if (len < 1)
+		len = 1;
+	else if ((unsigned)len > sizeof(rx))
+		len = sizeof(rx);
+
+	memset(rx, 0, sizeof(rx));
+	status = read(self->fd, &rx[0], len);
+
+	if (status < 0) {
+		PyErr_SetFromErrno(PyExc_IOError);
+		return NULL;
+	}
+
+	if (status != len) {
+		perror("short read");
+		return NULL;
+	}
+
+	list = PyList_New(len);
+
+	for (i = 0; i < len; i++) {
+		PyObject *val = Py_BuildValue("l", (long)rx[i]);
+
+		PyList_SET_ITEM(list, i, val);
+	}
+
+	return list;
 }
 
-static PyObject *
-SPIslave_write(SPIslave* self, PyObject* args)
-{
+static char *wrmsg_list0 = "Empty argument list.";
+static char *wrmsg_listmax = "Argument list size exceeds %d bytes.";
+static char *wrmsg_val = "Non-Int/Long value in argument: %x.";
 
+static PyObject *SPIslave_write(SPIslave *self, PyObject *args)
+{
+	int status;
+	uint16_t i, len;
+	uint8_t tx[MAX_PATH];
+	PyObject *obj, *seq;
+	char wrmsg_text[MAX_PATH];
+
+	if (!PyArg_ParseTuple(args, "O:write", &obj))
+		return NULL;
+
+	seq = PySequence_Fast(obj, "expected a sequence");
+	len = PySequence_Fast_GET_SIZE(obj);
+	if (!seq || len <= 0) {
+		PyErr_SetString(PyExc_OverflowError, wrmsg_list0);
+		return NULL;
+	}
+
+	if (len > MAX_PATH) {
+		snprintf(wrmsg_text, sizeof(wrmsg_text) - 1, wrmsg_listmax,
+			 MAX_PATH);
+		PyErr_SetString(PyExc_OverflowError, wrmsg_text);
+		return NULL;
+	}
+
+	for (i = 0; i < len; i++) {
+		PyObject *val = PySequence_Fast_GET_ITEM(seq, i);
+
+		if (PyInt_Check(val))
+			tx[i] = (__u8)PyInt_AsLong(val);
+		else {
+			snprintf(wrmsg_text, sizeof(wrmsg_text) - 1, wrmsg_val,
+				 val);
+			PyErr_SetString(PyExc_TypeError, wrmsg_text);
+			return NULL;
+		}
+	}
+
+	Py_DECREF(seq);
+	status = write(self->fd, &tx[0], len);
+
+	if (status < 0) {
+		PyErr_SetFromErrno(PyExc_IOError);
+		return NULL;
+	}
+
+	if (status != len) {
+		perror("short write");
+		return NULL;
+	}
+
+	Py_INCREF(Py_None);
 	return Py_None;
 }
 
-static PyMethodDef SPIslave_methods[] =
-{
-	{"open", (PyCFunction)SPIslave_open, METH_VARARGS | METH_KEYWORDS, "open desc"},
-	{"close", (PyCFunction)SPIslave_close, METH_NOARGS, "close desc"},
-	{"read", (PyCFunction)SPIslave_read, METH_VARARGS, "read desc"},
-	{"write", (PyCFunction)SPIslave_write, METH_VARARGS, "write desc"},
+static PyMethodDef SPIslave_methods[] = {
+	{"open",
+	 (PyCFunction)SPIslave_open,
+	 METH_VARARGS | METH_KEYWORDS,
+	 "open desc"},
+
+	{"close",
+	 (PyCFunction)SPIslave_close,
+	 METH_NOARGS,
+	 "close desc"},
+
+	{"read",
+	 (PyCFunction)SPIslave_read,
+	 METH_VARARGS,
+	 "read desc"},
+
+	{"write",
+	 (PyCFunction)SPIslave_write,
+	 METH_VARARGS,
+	 "write desc"},
+
 	{NULL},
 };
 
-static int
-__SPIslave_set_mode(SPIslave *self, __u8 tmp)
+static int __SPIslave_set_mode(SPIslave *self, __u8 tmp)
 {
 	if (ioctl(self->fd, SPISLAVE_WR_MODE, &tmp) == -1) {
 		PyErr_SetFromErrno(PyExc_IOError);
@@ -164,17 +261,15 @@ __SPIslave_set_mode(SPIslave *self, __u8 tmp)
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_mode(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_mode(SPIslave *self, void *closure)
 {
 	PyObject *result = Py_BuildValue("i", self->mode);
-	Py_INCREF(result);
 
+	Py_INCREF(result);
 	return result;
 }
 
-static int
-SPIslave_set_mode(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_mode(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -191,31 +286,31 @@ SPIslave_set_mode(SPIslave *self, PyObject *val, void *closure)
 	}
 
 	if (tmp >= 0x3F) {
-		PyErr_SetString(PyExc_TypeError, "the mode must be between 0 and 63.");
+		PyErr_SetString(PyExc_TypeError,
+				"the mode must be between 0 and 63.");
 		return -1;
 	}
 
 	if (self->mode != tmp) {
-		if (__SPIslave_set_mode(self, tmp) < 0) {
+		if (__SPIslave_set_mode(self, tmp) < 0)
 			return -1;
-		}
+
 		self->mode = tmp;
 	}
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_bits_per_word(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_bits_per_word(SPIslave *self, void *closure)
 {
 	PyObject *result = Py_BuildValue("i", self->bits_per_word);
-	Py_INCREF(result);
 
+	Py_INCREF(result);
 	return result;
 }
 
-static int
-SPIslave_set_bits_per_word(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_bits_per_word(SPIslave *self, PyObject *val,
+				      void *closure)
 {
 	uint8_t tmp;
 
@@ -232,7 +327,8 @@ SPIslave_set_bits_per_word(SPIslave *self, PyObject *val, void *closure)
 	}
 
 	if (tmp > 64) {
-		PyErr_SetString(PyExc_TypeError, "the bits per word must be between 0 and 64.");
+		PyErr_SetString(PyExc_TypeError,
+				"the bits per word must be between 0 and 64.");
 		return -1;
 	}
 
@@ -247,17 +343,15 @@ SPIslave_set_bits_per_word(SPIslave *self, PyObject *val, void *closure)
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_max_speed(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_max_speed(SPIslave *self, void *closure)
 {
 	PyObject *result = Py_BuildValue("i", self->max_speed);
-	Py_INCREF(result);
 
+	Py_INCREF(result);
 	return result;
 }
 
-static int
-SPIslave_set_max_speed(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_max_speed(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -284,27 +378,23 @@ SPIslave_set_max_speed(SPIslave *self, PyObject *val, void *closure)
 	return 0;
 }
 
-
-static PyObject*
-SPIslave_get_tx_actual_length(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_tx_actual_length(SPIslave *self, void *closure)
 {
 	PyObject *result = Py_BuildValue("i", self->tx_actual_length);
-	Py_INCREF(result);
 
+	Py_INCREF(result);
 	return result;
 }
 
-static PyObject*
-SPIslave_get_rx_actual_length(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_rx_actual_length(SPIslave *self, void *closure)
 {
 	PyObject *result = Py_BuildValue("i", self->rx_actual_length);
-	Py_INCREF(result);
 
+	Py_INCREF(result);
 	return result;
 }
 
-static PyObject*
-SPIslave_get_SLAVE(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_SLAVE(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -317,8 +407,7 @@ SPIslave_get_SLAVE(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_SLAVE(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_SLAVE(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -335,16 +424,15 @@ SPIslave_set_SLAVE(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_SLAVE;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_CPOL(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_CPOL(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -357,8 +445,7 @@ SPIslave_get_CPOL(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_CPOL(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_CPOL(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -375,16 +462,15 @@ SPIslave_set_CPOL(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_CPOL;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_CPHA(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_CPHA(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -397,8 +483,7 @@ SPIslave_get_CPHA(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_CPHA(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_CPHA(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -415,16 +500,15 @@ SPIslave_set_CPHA(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_CPHA;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_NO_CS(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_NO_CS(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -437,8 +521,7 @@ SPIslave_get_NO_CS(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_NO_CS(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_NO_CS(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -455,16 +538,15 @@ SPIslave_set_NO_CS(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_NO_CS;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_CS_HIGH(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_CS_HIGH(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -477,8 +559,7 @@ SPIslave_get_CS_HIGH(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_CS_HIGH(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_CS_HIGH(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -495,16 +576,15 @@ SPIslave_set_CS_HIGH(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_CS_HIGH;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
 }
 
-static PyObject*
-SPIslave_get_LSB_FIRST(SPIslave *self, void *closure)
+static PyObject *SPIslave_get_LSB_FIRST(SPIslave *self, void *closure)
 {
 	PyObject *result;
 
@@ -517,8 +597,7 @@ SPIslave_get_LSB_FIRST(SPIslave *self, void *closure)
 	return result;
 }
 
-static int
-SPIslave_set_LSB_FIRST(SPIslave *self, PyObject *val, void *closure)
+static int SPIslave_set_LSB_FIRST(SPIslave *self, PyObject *val, void *closure)
 {
 	uint8_t tmp;
 
@@ -526,7 +605,8 @@ SPIslave_set_LSB_FIRST(SPIslave *self, PyObject *val, void *closure)
 		PyErr_SetString(PyExc_TypeError, "value is invalid");
 		return -1;
 	} else if (!PyBool_Check(val)) {
-		PyErr_SetString(PyExc_TypeError, "the LSB_FIRST must be boolean");
+		PyErr_SetString(PyExc_TypeError,
+				"the LSB_FIRST must be boolean");
 		return -1;
 	}
 
@@ -535,9 +615,9 @@ SPIslave_set_LSB_FIRST(SPIslave *self, PyObject *val, void *closure)
 	else
 		tmp = self->mode & ~SPISLAVE_LSB_FIRST;
 
-	if (__SPIslave_set_mode(self, tmp) < 0) {
+	if (__SPIslave_set_mode(self, tmp) < 0)
 		return -1;
-	}
+
 	self->mode = tmp;
 
 	return 0;
@@ -600,8 +680,7 @@ static PyGetSetDef SPIslave_getset[] = {
 	{NULL},
 };
 
-static int
-SPIslave_init(SPIslave *self, PyObject *args)
+static int SPIslave_init(SPIslave *self, PyObject *args)
 {
 	int device = -1;
 	char path[MAX_PATH];
@@ -610,7 +689,8 @@ SPIslave_init(SPIslave *self, PyObject *args)
 		return -1;
 
 	if (snprintf(path, MAX_PATH, "/dev/spislave%d", device) >= MAX_PATH) {
-		PyErr_SetString(PyExc_OverflowError, "Device number is invalid.");
+		PyErr_SetString(PyExc_OverflowError,
+				"Device number is invalid.");
 		return -1;
 	}
 
@@ -673,8 +753,7 @@ static struct PyModuleDef SPIslave_module = {
 	NULL, NULL, NULL, NULL, NULL
 };
 
-PyMODINIT_FUNC
-PyInit_SPIslave(void)
+PyMODINIT_FUNC PyInit_SPIslave(void)
 {
 	PyObject *m;
 
