@@ -18,6 +18,26 @@
 #define PyInt_Type	PyLong_Type
 #endif
 
+PyDoc_STRVAR(SPIslave_doc, "This module defines an object type that allows\n"
+"SPIslave transactions on hosts running the Linux kernel. The host kernel\n"
+"must have SPIslave core and SPIslave device interface.\n"
+"Author: Patryk Mezydlo"
+"E-mail: mezydlo.p@gmail.com");
+
+PyDoc_STRVAR(SPIslave_open_doc,"open(device)\n\n"
+			       "Connects the object to the specified\n"
+			       "SPIslave device.\n"
+			       "open(X) will open /dev/spislave<X>");
+
+PyDoc_STRVAR(SPIslave_close_doc,"close()\n\n"
+				"Disconnects the object from the interface\n");
+
+PyDoc_STRVAR(SPIslave_read_doc,"read(len) -> [values]\n\n"
+			       "Read len bytes from SPIslave device.\n");
+
+PyDoc_STRVAR(SPIslave_write_doc,"write([values])\n\n"
+				"Write bytes to SPIslave device.\n");
+
 typedef struct {
 	PyObject_HEAD;
 
@@ -232,22 +252,22 @@ static PyMethodDef SPIslave_methods[] = {
 	{"open",
 	 (PyCFunction)SPIslave_open,
 	 METH_VARARGS | METH_KEYWORDS,
-	 "open desc"},
+	 SPIslave_open_doc},
 
 	{"close",
 	 (PyCFunction)SPIslave_close,
 	 METH_NOARGS,
-	 "close desc"},
+	 SPIslave_close_doc},
 
 	{"read",
 	 (PyCFunction)SPIslave_read,
 	 METH_VARARGS,
-	 "read desc"},
+	 SPIslave_read_doc},
 
 	{"write",
 	 (PyCFunction)SPIslave_write,
 	 METH_VARARGS,
-	 "write desc"},
+	 SPIslave_write_doc},
 
 	{NULL},
 };
@@ -627,55 +647,70 @@ static PyGetSetDef SPIslave_getset[] = {
 	{"mode",
 	(getter)SPIslave_get_mode,
 	(setter)SPIslave_set_mode,
-	"spislave mode"},
+	"Defines basic setting of SPI transfer.\n"},
 
 	{"SLAVE",
 	(getter)SPIslave_get_SLAVE,
 	(setter)SPIslave_set_SLAVE,
-	""},
+	"Spi slave subsystem allows to work on both master or slave mode.\n"
+	"You need to state which mode you want to use before transfer.\n"
+	"Master mode is the main mode and is set by default.\n"},
 
 	{"CPHA",
 	(getter)SPIslave_get_CPHA,
 	(setter)SPIslave_set_CPHA,
-	""},
+	"That is CPHA=0 means sampling on the first clock edge, while CPHA=1\n"
+	"means sampling on the second clock edge, regardless of whether that\n"
+	"clock edge is rising or falling.\n"},
 
 	{"CPOL",
 	(getter)SPIslave_get_CPOL,
 	(setter)SPIslave_set_CPOL,
-	""},
+	"If CPOL is zero, than SCLK is normally low, and the first clock edge\n"
+	"is a rising edge. If CPOL is one, SCLK is normally high, and the\n"
+	"first clock edge is a falling edge.\n"},
 
 	{"NO_CS",
 	(getter)SPIslave_get_NO_CS,
 	(setter)SPIslave_set_NO_CS,
-	""},
+	"If NO_CS is zero, that CS is active, when NO_CS is set,\n"
+	"CS line is not active.\n"},
 
 	{"CS_HIGH",
 	(getter)SPIslave_get_CS_HIGH,
 	(setter)SPIslave_set_CS_HIGH,
-	""},
+	"That is CS_HIGH means when the CS line state is high actives the\n"
+	"receiving device.\n"},
 
 	{"LSB_FIRST",
 	(getter)SPIslave_get_LSB_FIRST,
 	(setter)SPIslave_set_LSB_FIRST,
-	""},
+	"The bit justification used to transfer spi words. Zero indicates\n"
+	"MSB-first; other values indicate the less common LSB-first\n"
+	"encoding. MSB-first is set by default.\n"},
 
 	{"max_speed",
 	(getter)SPIslave_get_max_speed,
 	(setter)SPIslave_set_max_speed,
-	"spislave max speed"},
+	"Only in master mode. The maximum SPI transfer speed in Hz. The spi\n"
+	"controller does not have to set this setting. Not every controller\n"
+	"supports it.\n"},
 
 	{"bits_per_word",
 	(getter)SPIslave_get_bits_per_word,
 	(setter)SPIslave_set_bits_per_word,
-	"spislave_bits_per_word"},
+	"Indicates the number of bits per one word. The typical numer of\n"
+	"bits is 8, 16, 32. The default value is 8 bits.\n"},
 
 	{"tx_actual_length",
 	(getter)SPIslave_get_tx_actual_length,
-	(setter)NULL, "spislave_tx_actual_length"},
+	(setter)NULL, "When you want to monitore how much bytes is in\n"
+		      "tx buffer.\n"},
 
 	{"rx_actual_length",
 	(getter)SPIslave_get_rx_actual_length,
-	(setter)NULL, "spislave_rx_actual_length"},
+	(setter)NULL, "When you want to monitore how much bytes is in\n"
+		      "rx buffer."},
 
 	{NULL},
 };
@@ -748,7 +783,7 @@ static PyTypeObject SPIslave_type = {
 static struct PyModuleDef SPIslave_module = {
 	PyModuleDef_HEAD_INIT,
 	"SPIslave",
-	"Module for SPI slave",
+	SPIslave_doc,
 	-1,
 	NULL, NULL, NULL, NULL, NULL
 };
