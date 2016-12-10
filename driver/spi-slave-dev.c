@@ -254,7 +254,7 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SPISLAVE_RD_MODE:
-		ret = __put_user(msg->mode, (__u8 __user *)arg);
+		ret = __put_user(msg->mode, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_RD_MAX_SPEED:
@@ -266,7 +266,7 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	case SPISLAVE_WR_MODE:
-		ret = __get_user(msg->mode, (__u8 __user *)arg);
+		ret = __get_user(msg->mode, (__u32 __user *)arg);
 		break;
 
 	case SPISLAVE_WR_MAX_SPEED:
