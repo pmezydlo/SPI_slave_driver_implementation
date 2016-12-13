@@ -12,6 +12,8 @@ Some reasons you might want to use this API include:
 
     * Very easy to implement
 
+    * Support for Python application
+
 Device can by used by one user at the same time.
 
 Device creation & Driver binding
@@ -67,6 +69,11 @@ up your transfer:
         Defines basic setting of SPI transfer.
 
         |  BIT(S) | FIELD NAME |                 DESCRIPTION                  |
+        +---------+------------+----------------------------------------------+
+        |    7    | TM         |Thatt is TM=1 means working in transmit mode. |
+        +---------+------------+----------------------------------------------+
+        |    6    | RM         |If this bit is ones, than controler works     |
+        |         |            |in receive mode.                              |
         +---------+------------+----------------------------------------------+
         |    5    | LSB_FIRST  |The bit justification used to transfer spi    |
         |         |            |words. Zero indicates MSB-first; other values |

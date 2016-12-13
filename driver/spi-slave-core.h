@@ -16,27 +16,14 @@
 extern struct bus_type spislave_bus_type;
 
 struct spislave_message {
-/*pointer for transmit data buffer*/
 	void  __iomem *tx;
-/*the length of transmit data buffer in bytes*/
 	u32 tx_actual_length;
-
-/*pointer for receive data buffer*/
 	void  __iomem *rx;
-/*the length of receive data buffer in bytes*/
 	u32 rx_actual_length;
-
-/*selection of master and slave mode*/
 	u8 mode;
-
-/*the number of bits per word*/
 	u32 bits_per_word;
-
-/*the number of bytes per one transfer*/
 	u32 buf_depth;
-
 	u32 max_speed;
-
 	u8 lsb_first;
 
 	wait_queue_head_t wait;

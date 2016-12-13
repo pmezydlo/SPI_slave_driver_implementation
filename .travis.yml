@@ -54,8 +54,6 @@ script:
 
   - sudo dtc -O dtb -o SPI0_slave-00A0.dtbo -b 0 -@ SPI0_slave.dts
   - sudo dtc -O dtb -o SPI1_slave-00A0.dtbo -b 0 -@ SPI1_slave.dts
-  - sudo dtc -O dtb -o PRU0_SPI_slave-00A0.dtbo -b 0 -@ PRU0_SPI_slave.dts
-  - sudo dtc -O dtb -o PRU1_SPI_slave-00A0.dtbo -b 0 -@ PRU1_SPI_slave.dts
 
   - cd $DST_PROJECT/python_lib/
   - sudo python3 setup.py install

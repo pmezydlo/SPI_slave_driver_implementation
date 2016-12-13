@@ -34,6 +34,11 @@ static int buf_depth = 64;
 module_param(buf_depth, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(buf_depth, "Size of each tx and rx buffer[default 64 bytes]");
 
+/*
+ * FIXME: alloc buffer which size is defined by module param
+ * free buffer when is new transfer or users closes the file
+ */
+
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
 static DEFINE_MUTEX(spislave_dev_list_lock);
@@ -57,10 +62,23 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	ssize_t status;
 	unsigned long missing;
 	DECLARE_WAITQUEUE(wait, current);
-	unsigned long flags;
+	unsigned long flags;	/*
+	 * FIXME: call the transfer function
+	 * when users uses read must add bit
+	 * means only receive mode
+	 */
+
+
 	int ret = 0;
 
 	pr_info("%s: function: read\n", DRIVER_NAME);
+
+	/*
+	 * FIXME: call the transfer function
+	 * when users uses read must add bit
+	 * means only receive mode
+	 */
+
 	/*
 	 *if (msg->mode == SPISLAVE_SLAVE_MODE) {
 	 *	ret = spislave_transfer_msg(slave);
@@ -68,6 +86,7 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	 *		status = -EFAULT;
 	 *}
 	 */
+
 	spin_lock_irqsave(&msg->wait_lock, flags);
 
 	if (filp->f_flags & O_NONBLOCK) {
@@ -97,7 +116,13 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	if (!msg->tx) {
 		msg->tx = kzalloc(msg->buf_depth, GFP_KERNEL);
 		if (!msg->tx)
-			return -ENOMEM;
+			return -ENOMEM;	/*
+	 * FIXME: call the transfer function
+	 * when users uses read must add bit
+	 * means only receive mode
+	 */
+
+
 	}
 
 	if (!msg->rx) {
@@ -156,6 +181,12 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 		status = -EFAULT;
 
 	mutex_unlock(&msg->msg_lock);
+
+	/*
+	 * FIXME: call the transfer function
+	 * when users uses write must add bit
+	 * means only transmit mode
+	 */
 
 	/*if (msg->mode == SPISLAVE_MASTER_MODE) {*/
 	ret = spislave_transfer_msg(slave);
@@ -240,6 +271,14 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 
 	mutex_lock(&msg->msg_lock);
 
+	/*
+	 * FIXME: check arg and cmd argument, if cmd is ioctl type
+	 */
+
+	/*
+	 * FIXME: check all ioctl inputs and outputs
+	 */
+
 	switch (cmd) {
 	case SPISLAVE_RD_TX_ACTUAL_LENGTH:
 		ret = __put_user(msg->tx_actual_length, (__u32 __user *)arg);
@@ -274,6 +313,14 @@ static long spislave_ioctl(struct file *filp, unsigned int cmd,
 		break;
 
 	default:
+
+		/*
+		 * TODO: add support for full-duplex transfer
+		 * message uses own structures which located in
+		 * spi-slave-dev.h,
+		 *
+		 * need translate ioctl message to spi slave message standards
+		 */
 
 		size_msg = _IOC_SIZE(cmd);
 		pr_info("%s: ioctl size_msg:%d/n", DRIVER_NAME, size_msg);

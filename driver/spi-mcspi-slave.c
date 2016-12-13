@@ -124,12 +124,12 @@ struct mcspi_drv {
 	unsigned int irq;
 };
 
-unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
+inline unsigned int mcspi_slave_read_reg(void __iomem *base, u32 idx)
 {
 	return ioread32(base + idx);
 }
 
-void mcspi_slave_write_reg(void __iomem *base,
+inline void mcspi_slave_write_reg(void __iomem *base,
 		u32 idx, u32 val)
 {
 	iowrite32(val, base + idx);
