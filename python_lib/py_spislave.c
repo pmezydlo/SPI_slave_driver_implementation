@@ -18,6 +18,11 @@
 #define PyInt_Type	PyLong_Type
 #endif
 
+/*
+ * TODO:
+ * add support for full-duplex transfer,
+ */
+
 PyDoc_STRVAR(SPIslave_doc, "This module defines an object type that allows\n"
 "SPIslave transactions on hosts running the Linux kernel. The host kernel\n"
 "must have SPIslave core and SPIslave device interface.\n"
