@@ -34,11 +34,6 @@ static int buf_depth = 64;
 module_param(buf_depth, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(buf_depth, "Size of each tx and rx buffer[default 64 bytes]");
 
-/*
- * FIXME: alloc buffer which size is defined by module param
- * free buffer when is new transfer or users closes the file
- */
-
 static LIST_HEAD(spislave_dev_list);
 static struct class *spislave_class;
 static DEFINE_MUTEX(spislave_dev_list_lock);
@@ -62,30 +57,17 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 	ssize_t status;
 	unsigned long missing;
 	DECLARE_WAITQUEUE(wait, current);
-	unsigned long flags;	/*
-	 * FIXME: call the transfer function
-	 * when users uses read must add bit
-	 * means only receive mode
-	 */
-
-
+	unsigned long flags;
 	int ret = 0;
+
+	msg->mode |= SPISLAVE_TRM;
+	msg->mode &= ~SPISLAVE_RM;
 
 	pr_info("%s: function: read\n", DRIVER_NAME);
 
-	/*
-	 * FIXME: call the transfer function
-	 * when users uses read must add bit
-	 * means only receive mode
-	 */
-
-	/*
-	 *if (msg->mode == SPISLAVE_SLAVE_MODE) {
-	 *	ret = spislave_transfer_msg(slave);
-	 *	if (ret < 0)
-	 *		status = -EFAULT;
-	 *}
-	 */
+	ret = spislave_transfer_msg(slave);
+	if (ret < 0)
+		status = -EFAULT;
 
 	spin_lock_irqsave(&msg->wait_lock, flags);
 
@@ -112,18 +94,6 @@ static ssize_t spislave_read(struct file *filp, char __user *buf, size_t count,
 
 	if (count > msg->buf_depth)
 		return -EMSGSIZE;
-
-	if (!msg->tx) {
-		msg->tx = kzalloc(msg->buf_depth, GFP_KERNEL);
-		if (!msg->tx)
-			return -ENOMEM;	/*
-	 * FIXME: call the transfer function
-	 * when users uses read must add bit
-	 * means only receive mode
-	 */
-
-
-	}
 
 	if (!msg->rx) {
 		msg->rx = kzalloc(msg->buf_depth, GFP_KERNEL);
@@ -182,13 +152,9 @@ static ssize_t spislave_write(struct file *filp, const char __user *buf,
 
 	mutex_unlock(&msg->msg_lock);
 
-	/*
-	 * FIXME: call the transfer function
-	 * when users uses write must add bit
-	 * means only transmit mode
-	 */
+	msg->mode |= SPISLAVE_TRM;
+	msg->mode &= ~SPISLAVE_TM;
 
-	/*if (msg->mode == SPISLAVE_MASTER_MODE) {*/
 	ret = spislave_transfer_msg(slave);
 	if (ret < 0) {
 		status = -EFAULT;
@@ -202,10 +168,14 @@ static int spislave_release(struct inode *inode, struct file *filp)
 {
 	struct spislave_data *data = filp->private_data;
 	struct spislave *slave = data->slave;
+	struct spislave_message *msg = slave->msg;
 
 	pr_info("%s: function: release\n", DRIVER_NAME);
 
 	mutex_lock(&spislave_dev_list_lock);
+
+	kfree(msg->tx);
+	kfree(msg->rx);
 
 	spislave_msg_remove(slave);
 
@@ -249,6 +219,7 @@ static int spislave_open(struct inode *inode, struct file *filp)
 	msg = spislave_msg_alloc(slave);
 	if (!msg)
 		ret = -ENOMEM;
+	msg->buf_depth = buf_depth;
 
 	mutex_unlock(&spislave_dev_list_lock);
 

@@ -674,6 +674,13 @@ static int mcspi_slave_probe(struct platform_device *pdev)
 	mcspi->pol = pol;
 	mcspi->pha = pha;
 
+	/* FIXME:
+	 * CPOL and CPHA doesnt depend on device property which
+	 * located in dts file but CPOL and CPHA is setting when message is on
+	 * going
+	 */
+
+
 	slave->transfer_msg = mcspi_slave_transfer;
 	slave->clear_msg = mcspi_slave_clear;
 
