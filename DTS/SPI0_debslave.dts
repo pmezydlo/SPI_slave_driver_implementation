@@ -1,0 +1,35 @@
+/*
+ * Copyright (c) 2016 Patryk Mezydlo <pmezydlo - mezydlo.p@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published by
+ * the Free Software Foundation.
+ */
+
+/dts-v1/;
+/plugin/;
+
+/* SPI0 slave DTS */
+/ {
+
+    compatible = "ti,beaglebone", "ti,beaglebone-black";
+
+    fragment@0 {
+        target = <&ocp>;
+        __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            spislave0: spi_slave_debug {
+                compatible = "spislave,spi-slave-debug";
+                #address-cells = <1>;
+                #size-cells = <0>;
+                status = "okay";
+                spislave0@0 {
+                    reg = <0>;
+                    compatible = "linux,spislave";
+                };
+            };
+        };
+    };
+};

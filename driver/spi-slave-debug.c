@@ -22,7 +22,7 @@
 
 const struct of_device_id debspi_slave_of_match[] = {
 	{
-		.compatible = "ti,spi-slave-debug",
+		.compatible = "spislave,spi-slave-debug",
 	},
 	{ }
 };
